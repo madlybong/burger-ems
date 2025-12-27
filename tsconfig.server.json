@@ -1,0 +1,18 @@
+{
+    "compilerOptions": {
+        "target": "ESNext",
+        "module": "ESNext",
+        "moduleResolution": "bundler",
+        "strict": true,
+        "composite": true,
+        "skipLibCheck": true,
+        "allowSyntheticDefaultImports": true,
+        "types": [
+            "bun-types"
+        ]
+    },
+    "include": [
+        "src/server/**/*",
+        "scripts/**/*"
+    ]
+}

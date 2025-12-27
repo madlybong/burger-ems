@@ -3,17 +3,17 @@ import { join, relative, resolve } from "path";
 import { $ } from "bun";
 
 const ROOT = process.cwd();
-const FRONTEND_DIR = join(ROOT, "frontend");
-const BACKEND_DIR = join(ROOT, "backend");
-const DIST_DIR = join(ROOT, "dist");
-const OUT_FILE = join(BACKEND_DIR, "src", "embedded_frontend.ts");
+const FRONTEND_DIR = ROOT; // Root since vite.config.ts is at root
+const BACKEND_DIR = join(ROOT, "src", "server");
+const DIST_DIR = join(ROOT, "release");
+const OUT_FILE = join(BACKEND_DIR, "embedded_frontend.ts");
 
 async function build() {
     console.log("Building Frontend...");
-    await $`cd ${FRONTEND_DIR} && bun run build`;
+    await $`bun run build:ui`;
 
     console.log("Embedding Frontend Assets...");
-    const distPath = join(FRONTEND_DIR, "dist");
+    const distPath = join(ROOT, "dist");
     const files = getAllFiles(distPath);
 
     // Generate TS file with Map of path -> content
@@ -36,7 +36,7 @@ async function build() {
     console.log(`Embedded ${files.length} files into ${OUT_FILE}`);
 
     // Create server_build.ts if not exists (or overwrite)
-    const buildServerPath = join(BACKEND_DIR, "src", "server_build.ts");
+    const buildServerPath = join(BACKEND_DIR, "server_build.ts");
     const serverCode = `
 import { Hono } from "hono";
 import { serveStatic } from "hono/bun";
@@ -50,7 +50,6 @@ import upload from "./api/upload";
 import db from "./db";
 
 // Ensure DB tables exist (init) 
-// In compiled app, we might need to run migration check on startup
 import { initDB } from "./db/init";
 initDB(); 
 
@@ -68,14 +67,14 @@ app.route("/api/upload", upload);
 app.use("*", async (c, next) => {
     const path = c.req.path === "/" ? "/index.html" : c.req.path;
     if (assets.has(path)) {
-        const content = assets.get(path);
+        const content = assets.get(path)!;
         const mime = getMimeType(path) || "application/octet-stream";
         c.header("Content-Type", mime);
         return c.body(content);
     }
     // SPA Fallback
     if (!path.startsWith("/api") && assets.has("/index.html")) {
-         const content = assets.get("/index.html");
+         const content = assets.get("/index.html")!;
          c.header("Content-Type", "text/html");
          return c.body(content);
     }
@@ -95,9 +94,9 @@ export default {
     if (!require("fs").existsSync(DIST_DIR)) mkdirSync(DIST_DIR);
 
     // Bun build
-    await $`cd ${BACKEND_DIR} && bun build --compile --minify --sourcemap src/server_build.ts --outfile ../dist/astrake-ems`;
+    await $`bun build --compile --minify --sourcemap src/server/server_build.ts --outfile release/astrake-ems`;
 
-    console.log("Build Complete: dist/astrake-ems.exe");
+    console.log("Build Complete: release/astrake-ems.exe");
 }
 
 function getAllFiles(dir: string, fileList: string[] = []) {

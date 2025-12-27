@@ -6,6 +6,9 @@ dist/
 out/
 build/
 coverage/
+release/
+src/server/server_build.ts
+src/server/embedded_frontend.ts
 
 # Environment
 .env
@@ -26,6 +29,7 @@ Thumbs.db
 data/*.db
 data/*.db-journal
 data/*.db-wal
+data/generated/
 
 # Logs
 logs/
