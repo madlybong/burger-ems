@@ -9,7 +9,8 @@
         "allowSyntheticDefaultImports": true,
         "types": [
             "bun-types"
-        ]
+        ],
+        "outDir": "../../dist/tsc-out"
     },
     "include": [
         "src/server/**/*",

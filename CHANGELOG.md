@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.0.2] - 2025-12-28
+
+### Fixed
+- **Theme System**: Hardened the theme system, establishing a single source of truth for colors and fixing broken dark mode navigation.
+- **Layout Alignment**: Fixed vertical centering issues on full-height pages (Billing, Projects, Employees).
+- **Navigation Colors**: Corrected sidebar navigation colors and active state highlights for better visibility.
+- **Design Consistency**: Enforced uniform design tokens (outlined inputs, tonal buttons, flat cards) via global defaults.
+
+### Changed
+- Standardized all application inputs to use `variant="outlined"` and `rounded="lg"`.
+- Standardized all buttons to use `variant="tonal"` and `density="compact"`.
+- Added a global footer with system status.
+
 ## [0.0.1] - 2025-12-27
 
 ### Added

@@ -15,6 +15,14 @@ projects.post("/", async (c) => {
     const body = await c.req.json();
     const { company_id, client_name, site_name, work_order_no, start_date, end_date, status } = body;
 
+    // Validation
+    if (!company_id || typeof company_id !== 'number') return c.json({ error: "Invalid or missing company_id" }, 400);
+    if (!client_name || typeof client_name !== 'string') return c.json({ error: "Invalid or missing client_name" }, 400);
+    if (!site_name || typeof site_name !== 'string') return c.json({ error: "Invalid or missing site_name" }, 400);
+    if (!work_order_no || typeof work_order_no !== 'string') return c.json({ error: "Invalid or missing work_order_no" }, 400);
+    if (!start_date || typeof start_date !== 'string') return c.json({ error: "Invalid or missing start_date" }, 400);
+    if (!end_date || typeof end_date !== 'string') return c.json({ error: "Invalid or missing end_date" }, 400);
+
     const stmt = db.prepare(`
     INSERT INTO projects (company_id, client_name, site_name, work_order_no, start_date, end_date, status)
     VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -33,6 +41,13 @@ projects.put("/:id", async (c) => {
     const id = c.req.param("id");
     const body = await c.req.json();
     const { client_name, site_name, work_order_no, start_date, end_date, status } = body;
+
+    // Validation
+    if (!client_name || typeof client_name !== 'string') return c.json({ error: "Invalid or missing client_name" }, 400);
+    if (!site_name || typeof site_name !== 'string') return c.json({ error: "Invalid or missing site_name" }, 400);
+    if (!work_order_no || typeof work_order_no !== 'string') return c.json({ error: "Invalid or missing work_order_no" }, 400);
+    if (!start_date || typeof start_date !== 'string') return c.json({ error: "Invalid or missing start_date" }, 400);
+    if (!end_date || typeof end_date !== 'string') return c.json({ error: "Invalid or missing end_date" }, 400);
 
     const stmt = db.prepare(`
     UPDATE projects 

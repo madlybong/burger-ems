@@ -1,31 +1,44 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue';
-import { useRouter } from 'vue-router';
+import { ref, onMounted, computed, watch } from 'vue';
+import { useRouter, useRoute } from 'vue-router';
 import type { BillingPeriod, Project } from '../types';
 
 const router = useRouter();
-const headers = [
+const route = useRoute();
+import { useDisplay } from 'vuetify';
+
+const { mobile } = useDisplay();
+
+const headers = computed(() => [
   { title: 'Project / Site', key: 'site_name' },
   { title: 'Dates', key: 'dates' },
   { title: 'Type', key: 'label' },
   { title: 'Actions', key: 'actions', sortable: false },
-];
+]);
+
+// Filter - Defined BEFORE usages
+const filterProjectId = computed(() => route.query.project_id ? Number(route.query.project_id) : null);
+const filteredPeriods = computed(() => {
+  if (!filterProjectId.value) return periods.value;
+  return periods.value.filter(p => p.project_id === filterProjectId.value);
+});
 
 const periods = ref<BillingPeriod[]>([]);
 const projects = ref<Project[]>([]);
 const loading = ref(false);
 const dialog = ref(false);
-const editedItem = ref<BillingPeriod>(getDefaultPeriod());
-const isNew = computed(() => !editedItem.value.id);
 
 function getDefaultPeriod(): BillingPeriod {
   return {
-    project_id: 0,
+    project_id: filterProjectId.value || 0,
     from_date: '',
     to_date: '',
     label: ''
   };
 }
+
+const editedItem = ref<BillingPeriod>(getDefaultPeriod());
+const isNew = computed(() => !editedItem.value.id);
 
 async function fetchData() {
   loading.value = true;
@@ -59,7 +72,7 @@ function openDialog(item?: BillingPeriod) {
 async function save() {
   const method = isNew.value ? 'POST' : 'PUT';
   const url = isNew.value ? '/api/billing' : `/api/billing/${editedItem.value.id}`;
-  
+
   try {
     const res = await fetch(url, {
       method,
@@ -88,25 +101,25 @@ onMounted(fetchData);
 </script>
 
 <template>
-  <v-container>
-    <v-row class="mb-4" align="center">
-      <v-col>
-        <h2>Billing Periods</h2>
-      </v-col>
-      <v-col class="text-right">
-        <v-btn color="primary" @click="openDialog()">New Billing Period</v-btn>
-      </v-col>
-    </v-row>
+  <v-container fluid class="pa-0 d-flex flex-column h-100 bg-background">
+    <v-toolbar color="surface" density="compact" class="border-b px-2 flex-grow-0">
+      <div v-if="filterProjectId">
+        <v-btn icon="mdi-arrow-left" size="small" variant="text" @click="router.replace('/billing')"></v-btn>
+        <span class="text-subtitle-1 font-weight-bold text-uppercase ms-2">Project #{{ filterProjectId }}</span>
+      </div>
+      <v-toolbar-title v-else class="text-subtitle-1 font-weight-bold text-uppercase">
+        Billing Cycles
+      </v-toolbar-title>
+      <v-spacer></v-spacer>
+      <v-btn prepend-icon="mdi-plus" color="primary" class="text-caption font-weight-bold" @click="openDialog()">New
+        Cycle</v-btn>
+    </v-toolbar>
 
-    <v-data-table
-      :headers="headers"
-      :items="periods"
-      :loading="loading"
-      class="elevation-1"
-    >
+    <v-data-table :headers="headers" :items="filteredPeriods" :loading="loading" class="flex-grow-1 bg-surface"
+      density="compact" hover>
       <template v-slot:item.site_name="{ item }">
         <div>{{ item.client_name }} - {{ item.site_name }}</div>
-        <div class="text-caption text-grey">{{ item.work_order_no }}</div>
+        <div class="text-caption text-medium-emphasis">{{ item.work_order_no }}</div>
       </template>
       <template v-slot:item.dates="{ item }">
         {{ formatDate(item.from_date) }} - {{ formatDate(item.to_date) }}
@@ -114,6 +127,14 @@ onMounted(fetchData);
       <template v-slot:item.actions="{ item }">
         <v-btn size="small" variant="text" color="primary" @click="openDetail(item)">Manage</v-btn>
         <v-icon size="small" class="me-2" @click="openDialog(item)">mdi-pencil</v-icon>
+      </template>
+      <template v-slot:no-data>
+        <div class="pa-5 text-center">
+          <v-icon size="large" color="disabled" class="mb-2">mdi-calendar-blank</v-icon>
+          <div class="text-subtitle-1 font-weight-bold text-medium-emphasis">No Billing Periods</div>
+          <div class="text-caption text-disabled mb-3">Create a period to start tracking attendance.</div>
+          <v-btn color="primary" size="small" @click="openDialog()">Create First Period</v-btn>
+        </div>
       </template>
     </v-data-table>
 
@@ -126,14 +147,8 @@ onMounted(fetchData);
           <v-container>
             <v-row>
               <v-col cols="12">
-                <v-select 
-                  v-model="editedItem.project_id"
-                  :items="projects"
-                  item-title="site_name"
-                  item-value="id"
-                  label="Project"
-                  :readonly="!isNew"
-                >
+                <v-select v-model="editedItem.project_id" :items="projects" item-title="site_name" item-value="id"
+                  label="Project" :readonly="!isNew">
                   <template v-slot:item="{ props, item }">
                     <v-list-item v-bind="props" :subtitle="item.raw.client_name"></v-list-item>
                   </template>
@@ -153,8 +168,8 @@ onMounted(fetchData);
         </v-card-text>
         <v-card-actions>
           <v-spacer></v-spacer>
-          <v-btn color="blue-darken-1" variant="text" @click="dialog = false">Cancel</v-btn>
-          <v-btn color="blue-darken-1" variant="text" @click="save">Save</v-btn>
+          <v-btn color="medium-emphasis" variant="text" @click="dialog = false">Cancel</v-btn>
+          <v-btn color="primary" @click="save">Save</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>

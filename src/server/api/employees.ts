@@ -16,6 +16,16 @@ employees.post("/", async (c) => {
     const body = await c.req.json();
     const { company_id, name, skill_type, daily_wage, uan, pf_applicable, esi_applicable, gp_number } = body;
 
+    // Validation
+    if (!company_id || typeof company_id !== 'number') return c.json({ error: "Invalid or missing company_id" }, 400);
+    if (!name || typeof name !== 'string') return c.json({ error: "Invalid or missing name" }, 400);
+    if (!daily_wage || typeof daily_wage !== 'number') return c.json({ error: "Invalid or missing daily_wage" }, 400);
+
+    const validSkills = ['unskilled', 'skilled', 'supervisor', 'engineer'];
+    if (!skill_type || !validSkills.includes(skill_type)) {
+        return c.json({ error: `Invalid skill_type. Must be one of: ${validSkills.join(', ')}` }, 400);
+    }
+
     const stmt = db.prepare(`
     INSERT INTO employees (company_id, name, skill_type, daily_wage, uan, pf_applicable, esi_applicable, gp_number)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -34,6 +44,15 @@ employees.put("/:id", async (c) => {
     const id = c.req.param("id");
     const body = await c.req.json();
     const { name, skill_type, daily_wage, uan, pf_applicable, esi_applicable, gp_number } = body;
+
+    // Validation
+    if (!name || typeof name !== 'string') return c.json({ error: "Invalid or missing name" }, 400);
+    if (!daily_wage || typeof daily_wage !== 'number') return c.json({ error: "Invalid or missing daily_wage" }, 400);
+
+    const validSkills = ['unskilled', 'skilled', 'supervisor', 'engineer'];
+    if (!skill_type || !validSkills.includes(skill_type)) {
+        return c.json({ error: `Invalid skill_type. Must be one of: ${validSkills.join(', ')}` }, 400);
+    }
 
     const stmt = db.prepare(`
     UPDATE employees 

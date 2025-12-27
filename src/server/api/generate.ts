@@ -33,19 +33,28 @@ generate.post("/billing/:id/:type", async (c) => {
     let filename = "";
     const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
 
+    // Clean site name for filename
+    const siteSafe = project.site_name.replace(/[^a-z0-9]/gi, '_');
+
     if (type === "attendance") {
         html = attendanceSummary({ company, project, period, rows });
-        filename = `Attendance_${project.site_name}_${period.from_date}_to_${period.to_date}_${timestamp}.pdf`;
+        filename = `Attendance_${siteSafe}_BP${billingPeriodId}_${timestamp}.pdf`;
     } else if (type === "wage") {
         html = wageDeclaration({ company, project, period, rows });
-        filename = `WageDeclaration_${project.site_name}_${period.from_date}_to_${period.to_date}_${timestamp}.pdf`;
+        filename = `WageDeclaration_${siteSafe}_BP${billingPeriodId}_${timestamp}.pdf`;
     } else {
         return c.json({ error: "Unknown document type" }, 400);
     }
 
     try {
-        const pdfBuffer = await generatePDF(html);
         const filePath = join(OUT_DIR, filename);
+
+        // Immutability Check: Ensure we never overwrite
+        if (existsSync(filePath)) {
+            return c.json({ error: "File collision. Please try again." }, 409);
+        }
+
+        const pdfBuffer = await generatePDF(html);
         writeFileSync(filePath, pdfBuffer);
 
         // Record in DB

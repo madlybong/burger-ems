@@ -36,6 +36,7 @@ export interface BillingPeriod {
 }
 
 export interface BillingEmployee {
+    id?: number;
     billing_period_id: number;
     employee_id: number;
     days_worked: number;
@@ -43,4 +44,6 @@ export interface BillingEmployee {
     name?: string;
     skill_type?: string;
     daily_wage?: number;
+    uan?: string | null;
+    gp_number?: string | null;
 }

@@ -3,19 +3,45 @@ import { ref, onMounted, computed } from 'vue';
 import type { Employee } from '../types';
 import { SKILL_TYPES } from '../types';
 
-const headers = [
-  { title: 'Name', key: 'name' },
-  { title: 'Skill Type', key: 'skill_type' },
-  { title: 'Wage (₹)', key: 'daily_wage' },
-  { title: 'UAN', key: 'uan' },
-  { title: 'PF', key: 'pf_applicable' },
-  { title: 'ESI', key: 'esi_applicable' },
-  { title: 'Actions', key: 'actions', sortable: false },
-];
+import { useDisplay } from 'vuetify';
+
+const { mobile } = useDisplay();
+
+const headers = computed((): any[] => {
+  const base: any[] = [
+    { title: 'Name', key: 'name', width: mobile.value ? 'auto' : '25%' },
+    { title: 'Role/Skill', key: 'skill_type', width: mobile.value ? 'auto' : '15%' },
+  ];
+
+  if (!mobile.value) {
+    base.push(
+      { title: 'Rate (₹)', key: 'daily_wage', width: '10%' },
+      { title: 'UAN', key: 'uan', width: '15%' },
+      { title: 'GP No', key: 'gp_number', width: '10%' },
+      { title: 'PF', key: 'pf_applicable', width: '5%', align: 'center' },
+      { title: 'ESI', key: 'esi_applicable', width: '5%', align: 'center' },
+    );
+  }
+
+  return [
+    { title: 'Name', key: 'name', width: '25%' },
+    { title: 'Role', key: 'skill_type', width: '15%' },
+    { title: 'Rate (₹)', key: 'daily_wage', width: '10%' },
+    ...(!mobile.value ? [
+      { title: 'UAN', key: 'uan', width: '15%' },
+      { title: 'GP No', key: 'gp_number', width: '10%' },
+      { title: 'PF', key: 'pf_applicable', width: '5%', align: 'center' },
+      { title: 'ESI', key: 'esi_applicable', width: '5%', align: 'center' },
+    ] : []),
+    { title: 'Status', key: 'active', width: '10%' },
+    { title: '', key: 'actions', sortable: false, align: 'end' },
+  ];
+});
 
 const employees = ref<Employee[]>([]);
 const loading = ref(false);
 const dialog = ref(false);
+const search = ref('');
 const editedItem = ref<Employee>(getDefaultEmployee());
 const isNew = computed(() => !editedItem.value.id);
 
@@ -54,29 +80,36 @@ function openDialog(item?: Employee) {
   dialog.value = true;
 }
 
-async function save() {
-  const method = isNew.value ? 'POST' : 'PUT';
-  const url = isNew.value ? '/api/employees' : `/api/employees/${editedItem.value.id}`;
-  
+// Quick Inline Toggle for Status
+async function toggleStatus(item: Employee) {
+  // Optimistic
+  const startStatus = item.active;
+  item.active = !item.active;
+
   try {
-    const res = await fetch(url, {
-      method,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(editedItem.value)
-    });
-    if (res.ok) {
-      dialog.value = false;
-      fetchEmployees();
-    }
+    await saveItem(item, false);
   } catch (e) {
+    item.active = startStatus; // Revert
     console.error(e);
   }
 }
 
-async function deleteItem(item: Employee) {
-  if (!confirm('Are you sure you want to deactivate this employee?')) return;
+// Unified Save (Dialog or Inline)
+async function saveItem(item: Employee, isNewRecord: boolean) {
+  const method = isNewRecord ? 'POST' : 'PUT';
+  const url = isNewRecord ? '/api/employees' : `/api/employees/${item.id}`;
+
+  await fetch(url, {
+    method,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(item)
+  });
+}
+
+async function saveDialog() {
   try {
-    await fetch(`/api/employees/${item.id}`, { method: 'DELETE' });
+    await saveItem(editedItem.value, isNew.value);
+    dialog.value = false;
     fetchEmployees();
   } catch (e) {
     console.error(e);
@@ -87,74 +120,94 @@ onMounted(fetchEmployees);
 </script>
 
 <template>
-  <v-container>
-    <v-row class="mb-4" align="center">
-      <v-col>
-        <h2>Employees</h2>
-      </v-col>
-      <v-col class="text-right">
-        <v-btn color="primary" @click="openDialog()">Add Employee</v-btn>
-      </v-col>
-    </v-row>
+  <v-container fluid class="pa-0 d-flex flex-column h-100 bg-background">
+    <!-- Clean Toolbar -->
+    <v-toolbar color="surface" density="compact" class="border-b px-2 flex-grow-0">
+      <v-toolbar-title class="text-subtitle-1 font-weight-bold text-uppercase">
+        Workforce Directory
+      </v-toolbar-title>
+      <v-spacer></v-spacer>
+      <v-text-field v-model="search" label="Search" prepend-inner-icon="mdi-magnify" single-line class="me-2"
+        style="max-width: 200px"></v-text-field>
+      <v-btn prepend-icon="mdi-plus" color="primary" @click="openDialog()">New Employee</v-btn>
+    </v-toolbar>
 
-    <v-data-table
-      :headers="headers"
-      :items="employees"
-      :loading="loading"
-      class="elevation-1"
-    >
+    <!-- Dense Data Table -->
+    <v-data-table :headers="headers" :items="employees" :search="search" :loading="loading" density="compact"
+      class="flex-grow-1 bg-surface" fixed-header hover items-per-page="25">
+      <!-- Skill Badge -->
+      <template v-slot:item.skill_type="{ item }">
+        <v-chip size="x-small" label class="text-uppercase" :color="item.skill_type === 'skilled' ? 'primary' : 'grey'">
+          {{ item.skill_type }}
+        </v-chip>
+      </template>
+
+      <!-- Wage -->
+      <template v-slot:item.daily_wage="{ item }">
+        <span class="font-weight-medium">₹{{ item.daily_wage }}</span>
+      </template>
+
+      <!-- PF/ESI Checkmarks (Visual only) -->
       <template v-slot:item.pf_applicable="{ item }">
-        <v-icon :color="item.pf_applicable ? 'success' : 'grey'">
-          {{ item.pf_applicable ? 'mdi-check' : 'mdi-close' }}
-        </v-icon>
+        <v-icon v-if="item.pf_applicable" color="success" size="small">mdi-check</v-icon>
       </template>
+
       <template v-slot:item.esi_applicable="{ item }">
-        <v-icon :color="item.esi_applicable ? 'success' : 'grey'">
-          {{ item.esi_applicable ? 'mdi-check' : 'mdi-close' }}
-        </v-icon>
+        <v-icon v-if="item.esi_applicable" color="success" size="small">mdi-check</v-icon>
       </template>
+
+      <!-- Status Toggle -->
+      <template v-slot:item.active="{ item }">
+        <v-switch v-model="item.active" color="success" hide-details density="compact" inset
+          @click.stop="toggleStatus(item)"></v-switch>
+      </template>
+
+      <!-- Actions -->
       <template v-slot:item.actions="{ item }">
-        <v-icon size="small" class="me-2" @click="openDialog(item)">mdi-pencil</v-icon>
-        <v-icon size="small" color="error" @click="deleteItem(item)">mdi-delete</v-icon>
+        <v-btn icon="mdi-pencil" size="x-small" variant="text" color="medium-emphasis"
+          @click="openDialog(item)"></v-btn>
       </template>
     </v-data-table>
 
+    <!-- Minimized Dialog -->
     <v-dialog v-model="dialog" max-width="500px">
       <v-card>
-        <v-card-title>
-          <span class="text-h5">{{ isNew ? 'New' : 'Edit' }} Employee</span>
+        <v-card-title class="text-subtitle-1 font-weight-bold pt-3 ps-4">
+          {{ isNew ? 'Register New' : 'Edit' }} Employee
         </v-card-title>
         <v-card-text>
-          <v-container>
-            <v-row>
-              <v-col cols="12">
-                <v-text-field v-model="editedItem.name" label="Name" required></v-text-field>
-              </v-col>
-              <v-col cols="12" sm="6">
-                <v-select v-model="editedItem.skill_type" :items="SKILL_TYPES" label="Skill Type"></v-select>
-              </v-col>
-              <v-col cols="12" sm="6">
-                <v-text-field v-model.number="editedItem.daily_wage" label="Daily Wage" type="number" prefix="₹"></v-text-field>
-              </v-col>
-              <v-col cols="12" sm="6">
-                <v-text-field v-model="editedItem.uan" label="UAN"></v-text-field>
-              </v-col>
-              <v-col cols="12" sm="6">
-                <v-text-field v-model="editedItem.gp_number" label="GP Number"></v-text-field>
-              </v-col>
-              <v-col cols="12" sm="6">
-                <v-checkbox v-model="editedItem.pf_applicable" label="PF Applicable"></v-checkbox>
-              </v-col>
-              <v-col cols="12" sm="6">
-                <v-checkbox v-model="editedItem.esi_applicable" label="ESI Applicable"></v-checkbox>
-              </v-col>
-            </v-row>
-          </v-container>
+          <v-row dense>
+            <v-col cols="12">
+              <v-text-field v-model="editedItem.name" label="Full Name" class="mb-2"></v-text-field>
+            </v-col>
+            <v-col cols="6">
+              <v-select v-model="editedItem.skill_type" :items="SKILL_TYPES" label="Role" class="mb-2"></v-select>
+            </v-col>
+            <v-col cols="6">
+              <v-text-field v-model.number="editedItem.daily_wage" label="Daily Rate (₹)" type="number"
+                class="mb-2"></v-text-field>
+            </v-col>
+            <v-col cols="6">
+              <v-text-field v-model="editedItem.uan" label="UAN"></v-text-field>
+            </v-col>
+            <v-col cols="6">
+              <v-text-field v-model="editedItem.gp_number" label="GP #"></v-text-field>
+            </v-col>
+            <v-col cols="6">
+              <v-checkbox v-model="editedItem.pf_applicable" label="PF Eligible" density="compact"
+                hide-details></v-checkbox>
+            </v-col>
+            <v-col cols="6">
+              <v-checkbox v-model="editedItem.esi_applicable" label="ESI Eligible" density="compact"
+                hide-details></v-checkbox>
+            </v-col>
+          </v-row>
         </v-card-text>
+        <v-divider></v-divider>
         <v-card-actions>
           <v-spacer></v-spacer>
-          <v-btn color="blue-darken-1" variant="text" @click="dialog = false">Cancel</v-btn>
-          <v-btn color="blue-darken-1" variant="text" @click="save">Save</v-btn>
+          <v-btn color="medium-emphasis" variant="text" @click="dialog = false">Cancel</v-btn>
+          <v-btn color="primary" @click="saveDialog">Save Changes</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>

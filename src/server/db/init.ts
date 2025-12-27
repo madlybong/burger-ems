@@ -1,16 +1,28 @@
 import db from "./index";
 
 export function initDB() {
-    console.log("Initializing database...");
+  console.log("Initializing database...");
 
-    db.run(`
+  db.run(`
+    CREATE TABLE IF NOT EXISTS schema_info (
+      version INTEGER NOT NULL
+    );
+  `);
+
+  // Ensure version exists (minimal: insert ignore or check count)
+  const hasVersion = db.query("SELECT COUNT(*) as count FROM schema_info").get() as any;
+  if (hasVersion.count === 0) {
+    db.run("INSERT INTO schema_info (version) VALUES (1)");
+  }
+
+  db.run(`
     CREATE TABLE IF NOT EXISTS companies (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL
     );
   `);
 
-    db.run(`
+  db.run(`
     CREATE TABLE IF NOT EXISTS employees (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       company_id INTEGER NOT NULL,
@@ -26,7 +38,7 @@ export function initDB() {
     );
   `);
 
-    db.run(`
+  db.run(`
     CREATE TABLE IF NOT EXISTS projects (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       company_id INTEGER NOT NULL,
@@ -40,7 +52,7 @@ export function initDB() {
     );
   `);
 
-    db.run(`
+  db.run(`
     CREATE TABLE IF NOT EXISTS billing_periods (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       project_id INTEGER NOT NULL,
@@ -51,7 +63,7 @@ export function initDB() {
     );
   `);
 
-    db.run(`
+  db.run(`
     CREATE TABLE IF NOT EXISTS billing_employees (
       billing_period_id INTEGER NOT NULL,
       employee_id INTEGER NOT NULL,
@@ -63,7 +75,7 @@ export function initDB() {
     );
   `);
 
-    db.run(`
+  db.run(`
     CREATE TABLE IF NOT EXISTS generated_documents (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       billing_period_id INTEGER NOT NULL,
@@ -74,10 +86,10 @@ export function initDB() {
     );
   `);
 
-    console.log("Database initialized successfully.");
+  console.log("Database initialized successfully.");
 }
 
 // Auto-run if executed directly
 if (import.meta.main) {
-    initDB();
+  initDB();
 }
