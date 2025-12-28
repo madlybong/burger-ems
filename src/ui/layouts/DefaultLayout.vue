@@ -1,12 +1,21 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import { useTheme } from 'vuetify';
+import { useRouter } from 'vue-router';
+import { useAuthStore } from '../stores/auth';
 
 const theme = useTheme();
 const drawer = ref(true);
+const router = useRouter();
+const authStore = useAuthStore();
 
 function toggleTheme() {
   theme.global.name.value = theme.global.current.value.dark ? 'light' : 'dark';
+}
+
+function logout() {
+  authStore.clearAuth();
+  router.push('/login');
 }
 </script>
 
@@ -27,9 +36,35 @@ function toggleTheme() {
       <v-btn icon @click="toggleTheme" color="medium-emphasis">
         <v-icon>{{ theme.global.current.value.dark ? 'mdi-weather-sunny' : 'mdi-weather-night' }}</v-icon>
       </v-btn>
-      <v-avatar color="primary" variant="tonal" size="32" class="ms-2">
-        <span class="text-caption font-weight-bold">AD</span>
-      </v-avatar>
+      <v-menu min-width="200" offset="10">
+        <template v-slot:activator="{ props }">
+          <v-btn icon v-bind="props" class="ms-2">
+            <v-avatar color="primary" variant="tonal" size="32">
+              <span class="text-caption font-weight-bold">AD</span>
+            </v-avatar>
+          </v-btn>
+        </template>
+        <v-list density="compact" width="200">
+          <v-list-item class="pb-2">
+            <template v-slot:prepend>
+              <v-avatar color="primary" variant="tonal" size="small">
+                <span class="text-caption font-weight-bold">AD</span>
+              </v-avatar>
+            </template>
+            <v-list-item-title class="font-weight-bold">{{ authStore.user?.username || 'User' }}</v-list-item-title>
+            <v-list-item-subtitle class="text-caption">{{ authStore.user?.role || 'Role' }}</v-list-item-subtitle>
+          </v-list-item>
+
+          <v-divider class="my-1"></v-divider>
+
+          <v-list-item link title="My Profile" prepend-icon="mdi-account-circle-outline"></v-list-item>
+          <v-list-item link title="Settings" prepend-icon="mdi-cog-outline"></v-list-item>
+
+          <v-divider class="my-1"></v-divider>
+
+          <v-list-item @click="logout" title="Logout" prepend-icon="mdi-logout-variant" color="error"></v-list-item>
+        </v-list>
+      </v-menu>
     </v-app-bar>
 
     <!-- NAVIGATION -->

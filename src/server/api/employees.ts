@@ -33,7 +33,19 @@ employees.post("/", async (c) => {
 
     try {
         const info = stmt.run(company_id, name, skill_type, daily_wage, uan, pf_applicable ? 1 : 0, esi_applicable ? 1 : 0, gp_number);
-        return c.json({ id: info.lastInsertRowid, ...body }, 201);
+        const id = info.lastInsertRowid;
+
+        // Auto-generate credentials
+        const { generateStrongPassword } = await import("../utils/password");
+        const initialPassword = generateStrongPassword();
+        const hash = await Bun.password.hash(initialPassword);
+
+        db.run(
+            "UPDATE employees SET username = 'EMP' || id, password_hash = ?, is_first_login = 1 WHERE id = ?",
+            [hash, id.toString()]
+        );
+
+        return c.json({ id, ...body, username: 'EMP' + id, initial_password: initialPassword }, 201);
     } catch (err: any) {
         return c.json({ error: err.message }, 400);
     }
@@ -73,6 +85,18 @@ employees.delete("/:id", (c) => {
     const id = c.req.param("id");
     db.run("UPDATE employees SET active = 0 WHERE id = ?", [id]);
     return c.json({ success: true });
+});
+
+// Reset Password
+employees.post("/:id/reset-password", async (c) => {
+    const id = c.req.param("id");
+    const { generateStrongPassword } = await import("../utils/password");
+    const newPassword = generateStrongPassword();
+    const hash = await Bun.password.hash(newPassword);
+
+    db.run("UPDATE employees SET password_hash = ?, is_first_login = 1 WHERE id = ?", [hash, id]);
+
+    return c.json({ success: true, new_password: newPassword });
 });
 
 export default employees;

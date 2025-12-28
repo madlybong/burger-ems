@@ -87,6 +87,26 @@ export function initDB() {
   `);
 
   console.log("Database initialized successfully.");
+
+  // MIGRATIONS
+  // Check for new columns in employees
+  const empInfo = db.query("PRAGMA table_info(employees)").all() as any[];
+
+  if (!empInfo.some(c => c.name === 'password_hash')) {
+    console.log("Migrating: Adding password_hash and is_first_login to employees");
+    db.run("ALTER TABLE employees ADD COLUMN password_hash TEXT");
+    db.run("ALTER TABLE employees ADD COLUMN is_first_login BOOLEAN DEFAULT 1");
+  }
+
+  if (!empInfo.some(c => c.name === 'username')) {
+    console.log("Migrating: Adding username to employees");
+    db.run("ALTER TABLE employees ADD COLUMN username TEXT");
+    // Unique constraint via index or just trust app logic for legacy migration? 
+    // SQLite ADD COLUMN with UNIQUE is tricky if data exists.
+    // We settle for creating text column, populating it, then creating unique index.
+    db.run("UPDATE employees SET username = 'EMP' || id WHERE username IS NULL");
+    db.run("CREATE UNIQUE INDEX IF NOT EXISTS idx_employees_username ON employees(username)");
+  }
 }
 
 // Auto-run if executed directly
