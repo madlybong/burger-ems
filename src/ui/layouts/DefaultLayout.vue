@@ -91,9 +91,13 @@ function logout() {
 
         <div class="text-overline font-weight-black text-disabled mt-6 mb-2">Resources</div>
         <v-list density="compact" nav class="pa-0 bg-transparent">
-          <v-list-item to="/employees" rounded="lg" color="primary" variant="tonal">
+          <v-list-item to="/employees" rounded="lg" color="primary" variant="tonal" class="mb-1">
             <template v-slot:prepend><v-icon>mdi-account-group-outline</v-icon></template>
             <v-list-item-title class="font-weight-bold">Workforce</v-list-item-title>
+          </v-list-item>
+          <v-list-item to="/settings" rounded="lg" color="primary" variant="tonal">
+            <template v-slot:prepend><v-icon>mdi-cog-outline</v-icon></template>
+            <v-list-item-title class="font-weight-bold">Settings</v-list-item-title>
           </v-list-item>
         </v-list>
       </div>

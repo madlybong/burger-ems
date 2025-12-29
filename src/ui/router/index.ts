@@ -62,6 +62,11 @@ const routes = [
                 name: 'BillingDetail',
                 component: () => import('../pages/BillingDetail.vue'),
             },
+            {
+                path: '/settings',
+                name: 'Settings',
+                component: () => import('../pages/Settings.vue'),
+            },
         ],
     },
 ]

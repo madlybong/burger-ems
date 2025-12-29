@@ -138,4 +138,211 @@ billing.post("/:id/import-employees", async (c) => {
     return c.json({ message: "Not implemented yet, use manual add" });
 });
 
+// Finalize Billing Period
+// Triggers PF/ESI computation and locks the period
+billing.post("/:id/finalize", async (c) => {
+    const id = Number(c.req.param("id"));
+
+    try {
+        // Check if billing period exists
+        const period = db.query("SELECT * FROM billing_periods WHERE id = ?").get(id) as any;
+        if (!period) {
+            return c.json({ error: "Billing period not found" }, 404);
+        }
+
+        // Check if already finalized (idempotency)
+        if (period.status === 'finalized') {
+            return c.json({
+                message: "Billing period already finalized",
+                finalized: true,
+                finalized_at: period.finalized_at
+            });
+        }
+
+        // Check if there are employees
+        const employeeCount = db.query(`
+            SELECT COUNT(*) as count FROM billing_employees WHERE billing_period_id = ?
+        `).get(id) as any;
+
+        if (!employeeCount || employeeCount.count === 0) {
+            return c.json({ error: "Cannot finalize: No employees assigned to this billing period" }, 400);
+        }
+
+        // Get employees for computation
+        const employees = db.query(`
+            SELECT 
+                be.employee_id,
+                e.name,
+                be.days_worked,
+                e.daily_wage,
+                be.wage_amount,
+                e.pf_applicable,
+                e.esi_applicable
+            FROM billing_employees be
+            JOIN employees e ON be.employee_id = e.id
+            WHERE be.billing_period_id = ?
+        `).all(id) as any[];
+
+        // Get current statutory config
+        const config = db.query(`
+            SELECT * FROM statutory_config WHERE company_id = 1
+        `).get() as any;
+
+        if (!config) {
+            return c.json({ error: "Statutory configuration not found" }, 500);
+        }
+
+        // Import computation functions
+        const { computeBillingPeriodStatutory } = await import("../utils/statutory-computation");
+
+        // Convert to proper types
+        const employeeInputs = employees.map((emp: any) => ({
+            employee_id: emp.employee_id,
+            name: emp.name,
+            days_worked: emp.days_worked,
+            daily_wage: emp.daily_wage,
+            wage_amount: emp.wage_amount,
+            pf_applicable: !!emp.pf_applicable,
+            esi_applicable: !!emp.esi_applicable
+        }));
+
+        const statutoryConfig = {
+            company_id: config.company_id,
+            pf_enabled: !!config.pf_enabled,
+            pf_wage_basis: config.pf_wage_basis,
+            pf_employee_rate: config.pf_employee_rate,
+            pf_employer_rate: config.pf_employer_rate,
+            pf_wage_ceiling: config.pf_wage_ceiling,
+            pf_enforce_ceiling: !!config.pf_enforce_ceiling,
+            esi_enabled: !!config.esi_enabled,
+            esi_threshold: config.esi_threshold,
+            esi_employee_rate: config.esi_employee_rate,
+            esi_employer_rate: config.esi_employer_rate,
+            rounding_mode: config.rounding_mode
+        };
+
+        // Compute PF/ESI
+        const result = computeBillingPeriodStatutory({
+            billing_period_id: id,
+            from_date: period.from_date,
+            to_date: period.to_date,
+            employees: employeeInputs,
+            config: statutoryConfig
+        });
+
+        // Start transaction
+        // 1. Update billing period status
+        db.run(`
+            UPDATE billing_periods 
+            SET status = 'finalized', finalized_at = CURRENT_TIMESTAMP 
+            WHERE id = ?
+        `, [id]);
+
+        // 2. Store computation (check if exists first for idempotency)
+        const existingComputation = db.query(`
+            SELECT id FROM billing_period_statutory_computation WHERE billing_period_id = ?
+        `).get(id) as any;
+
+        let computationId;
+
+        if (!existingComputation) {
+            // Store config snapshot as JSON
+            const configSnapshot = JSON.stringify(result.config_snapshot);
+
+            // Insert main computation record
+            const stmt = db.prepare(`
+                INSERT INTO billing_period_statutory_computation (
+                    billing_period_id, config_snapshot, total_gross_wages,
+                    total_pf_employee, total_pf_employer, total_esi_employee, total_esi_employer,
+                    total_employee_deductions, total_employer_contributions, total_net_payable, locked
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+            `);
+
+            stmt.run(
+                id,
+                configSnapshot,
+                result.total_gross_wages,
+                result.total_pf_employee,
+                result.total_pf_employer,
+                result.total_esi_employee,
+                result.total_esi_employer,
+                result.total_employee_deductions,
+                result.total_employer_contributions,
+                result.total_net_payable
+            );
+
+            // Get the inserted computation ID
+            const computation = db.query(`
+                SELECT id FROM billing_period_statutory_computation WHERE billing_period_id = ?
+            `).get(id) as any;
+
+            computationId = computation.id;
+
+            // Insert employee-level results
+            const empStmt = db.prepare(`
+                INSERT INTO billing_employee_statutory (
+                    computation_id, employee_id, gross_wage, basic_wage, custom_wage,
+                    pf_applicable, pf_wage_basis, pf_wage_capped, pf_employee_amount, pf_employer_amount,
+                    pf_total_amount, pf_explanation, esi_applicable, esi_wage_basis, esi_employee_amount,
+                    esi_employer_amount, esi_total_amount, esi_explanation, total_employee_deduction,
+                    total_employer_contribution, net_payable
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `);
+
+            for (const empResult of result.employee_results) {
+                empStmt.run(
+                    computationId,
+                    empResult.employee_id,
+                    empResult.gross_wage,
+                    empResult.basic_wage,
+                    empResult.custom_wage,
+                    empResult.pf_applicable ? 1 : 0,
+                    empResult.pf_wage_basis,
+                    empResult.pf_wage_capped,
+                    empResult.pf_employee_amount,
+                    empResult.pf_employer_amount,
+                    empResult.pf_total_amount,
+                    empResult.pf_explanation,
+                    empResult.esi_applicable ? 1 : 0,
+                    empResult.esi_wage_basis,
+                    empResult.esi_employee_amount,
+                    empResult.esi_employer_amount,
+                    empResult.esi_total_amount,
+                    empResult.esi_explanation,
+                    empResult.total_employee_deduction,
+                    empResult.total_employer_contribution,
+                    empResult.net_payable
+                );
+            }
+        } else {
+            computationId = existingComputation.id;
+            // Ensure it's locked
+            db.run(`
+                UPDATE billing_period_statutory_computation 
+                SET locked = 1 
+                WHERE id = ?
+            `, [computationId]);
+        }
+
+        return c.json({
+            success: true,
+            message: "Billing period finalized successfully",
+            finalized: true,
+            computation_id: computationId,
+            statutory_summary: {
+                total_pf_employee: result.total_pf_employee,
+                total_pf_employer: result.total_pf_employer,
+                total_esi_employee: result.total_esi_employee,
+                total_esi_employer: result.total_esi_employer,
+                total_deductions: result.total_employee_deductions,
+                total_contributions: result.total_employer_contributions
+            }
+        });
+
+    } catch (err: any) {
+        console.error("Finalization error:", err);
+        return c.json({ error: err.message }, 500);
+    }
+});
+
 export default billing;

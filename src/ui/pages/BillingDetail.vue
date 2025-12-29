@@ -8,13 +8,19 @@ const route = useRoute();
 const id = route.params.id as string;
 const { mobile } = useDisplay();
 
-const activeTab = ref('employees'); // 'employees' | 'totals'
+const activeTab = ref('employees'); // 'employees' | 'totals' | 'statutory'
 
 const period = ref<BillingPeriod | null>(null);
 const billingEmployees = ref<BillingEmployee[]>([]);
 const allEmployees = ref<Employee[]>([]);
 const loading = ref(false);
 const dialog = ref(false);
+
+// Statutory computation state
+const statutoryComputation = ref<any>(null);
+const loadingStatutory = ref(false);
+const finalizing = ref(false);
+const showStatutoryDetails = ref(false);
 
 const headers = [
   { title: 'Employee', key: 'name', width: '25%' },
@@ -174,12 +180,60 @@ async function handleFileUpload(event: Event) {
   }
 }
 
+async function fetchStatutoryComputation() {
+  loadingStatutory.value = true;
+  try {
+    const res = await fetch(`/api/statutory-computation/${id}`);
+    if (res.ok) {
+      const data = await res.json();
+      if (data.computed) {
+        statutoryComputation.value = data;
+      }
+    }
+  } catch (e) {
+    console.error('Failed to fetch statutory computation:', e);
+  } finally {
+    loadingStatutory.value = false;
+  }
+}
+
+async function finalizeBillingPeriod() {
+  if (!confirm('Finalize this billing period? This will compute PF/ESI and lock the results.')) {
+    return;
+  }
+
+  finalizing.value = true;
+  try {
+    const res = await fetch(`/api/billing/${id}/finalize`, {
+      method: 'POST'
+    });
+    
+    const data = await res.json();
+    
+    if (data.success || data.finalized) {
+      alert(data.message || 'Billing period finalized successfully');
+      await fetchData();
+      await fetchStatutoryComputation();
+    } else {
+      alert(data.error || 'Failed to finalize');
+    }
+  } catch (e) {
+    console.error('Finalization error:', e);
+    alert('Failed to finalize billing period');
+  } finally {
+    finalizing.value = false;
+  }
+}
+
 function formatDate(date: string) {
   if (!date) return '-';
   return new Date(date).toLocaleDateString();
 }
 
-onMounted(fetchData);
+onMounted(() => {
+  fetchData();
+  fetchStatutoryComputation();
+});
 </script>
 
 <template>
@@ -188,6 +242,7 @@ onMounted(fetchData);
     <v-tabs v-if="mobile" v-model="activeTab" density="compact" grow class="bg-surface border-b">
       <v-tab value="employees" class="text-caption font-weight-bold">Employees</v-tab>
       <v-tab value="totals" class="text-caption font-weight-bold">Totals & Generation</v-tab>
+      <v-tab value="statutory" class="text-caption font-weight-bold">Statutory</v-tab>
     </v-tabs>
 
     <v-row no-gutters class="fill-height">
@@ -328,6 +383,121 @@ onMounted(fetchData);
               </v-card>
             </v-col>
           </v-row>
+        </div>
+
+        <v-divider></v-divider>
+
+        <!-- Statutory Section -->
+        <div class="pa-6 bg-surface" v-show="!mobile || activeTab === 'statutory'">
+          <div class="d-flex align-center mb-4">
+            <v-icon color="success" class="me-2">mdi-shield-check</v-icon>
+            <div class="text-overline font-weight-black text-high-emphasis tracking-wider"
+              style="font-size: 0.8rem !important;">Statutory Compliance</div>
+          </div>
+
+          <!-- Not Finalized State -->
+          <div v-if="!statutoryComputation">
+            <v-alert type="info" variant="tonal" density="compact" class="mb-4">
+              <div class="text-caption font-weight-bold">PF/ESI Not Computed</div>
+              <div class="text-caption">Finalize this period to compute statutory deductions</div>
+            </v-alert>
+
+            <v-btn block color="success" class="text-none font-weight-bold" size="large" elevation="2"
+              @click="finalizeBillingPeriod" prepend-icon="mdi-lock-check" :loading="finalizing"
+              :disabled="billingEmployees.length === 0">
+              Finalize & Compute
+            </v-btn>
+
+            <div class="text-caption text-medium-emphasis mt-2 text-center">
+              This will compute PF/ESI and lock the period
+            </div>
+          </div>
+
+          <!-- Finalized State -->
+          <div v-else>
+            <v-alert type="success" variant="tonal" density="compact" class="mb-4" border="start">
+              <div class="d-flex align-center">
+                <v-icon size="small" class="me-2">mdi-lock-check</v-icon>
+                <div>
+                  <div class="text-caption font-weight-bold">Period Finalized</div>
+                  <div class="text-caption">{{ new Date(statutoryComputation.computed_at).toLocaleString() }}</div>
+                </div>
+              </div>
+            </v-alert>
+
+            <!-- Statutory Summary -->
+            <v-card elevation="0" border class="mb-3">
+              <v-card-text class="pa-3">
+                <div class="text-caption font-weight-bold text-uppercase text-medium-emphasis mb-2">PF Deductions</div>
+                <div class="d-flex justify-space-between align-center mb-1">
+                  <span class="text-caption">Employee</span>
+                  <span class="text-body-2 font-weight-bold">₹{{ statutoryComputation.result?.total_pf_employee?.toLocaleString() || 0 }}</span>
+                </div>
+                <div class="d-flex justify-space-between align-center">
+                  <span class="text-caption">Employer</span>
+                  <span class="text-body-2 font-weight-bold">₹{{ statutoryComputation.result?.total_pf_employer?.toLocaleString() || 0 }}</span>
+                </div>
+              </v-card-text>
+            </v-card>
+
+            <v-card elevation="0" border class="mb-3">
+              <v-card-text class="pa-3">
+                <div class="text-caption font-weight-bold text-uppercase text-medium-emphasis mb-2">ESI Deductions</div>
+                <div class="d-flex justify-space-between align-center mb-1">
+                  <span class="text-caption">Employee</span>
+                  <span class="text-body-2 font-weight-bold">₹{{ statutoryComputation.result?.total_esi_employee?.toLocaleString() || 0 }}</span>
+                </div>
+                <div class="d-flex justify-space-between align-center">
+                  <span class="text-caption">Employer</span>
+                  <span class="text-body-2 font-weight-bold">₹{{ statutoryComputation.result?.total_esi_employer?.toLocaleString() || 0 }}</span>
+                </div>
+              </v-card-text>
+            </v-card>
+
+            <v-card elevation="0" color="success" variant="flat" style="border: 1px solid rgba(var(--v-theme-success), 0.2);">
+              <v-card-text class="pa-3 text-center">
+                <div class="text-caption font-weight-bold text-uppercase mb-1 text-white opacity-90">Total Deductions</div>
+                <div class="text-h5 font-weight-black text-white">₹{{ statutoryComputation.result?.total_employee_deductions?.toLocaleString() || 0 }}</div>
+                <div class="text-caption text-white opacity-70 mt-1">Employee share</div>
+              </v-card-text>
+            </v-card>
+
+            <v-btn block variant="outlined" color="primary" class="mt-3 text-none" size="small"
+              @click="showStatutoryDetails = !showStatutoryDetails">
+              <v-icon start>{{ showStatutoryDetails ? 'mdi-chevron-up' : 'mdi-chevron-down' }}</v-icon>
+              {{ showStatutoryDetails ? 'Hide' : 'View' }} Employee Details
+            </v-btn>
+
+            <!-- Employee Details Expansion -->
+            <v-expand-transition>
+              <div v-if="showStatutoryDetails" class="mt-3">
+                <v-card elevation="0" border>
+                  <v-list density="compact" class="pa-0">
+                    <template v-for="(emp, index) in statutoryComputation.result?.employee_results" :key="emp.employee_id">
+                      <v-list-item>
+                        <v-list-item-title class="text-caption font-weight-bold">{{ emp.name }}</v-list-item-title>
+                        <v-list-item-subtitle class="text-caption mt-1">
+                          <div class="d-flex justify-space-between">
+                            <span>PF:</span>
+                            <span class="font-weight-bold">₹{{ emp.pf_employee_amount }}</span>
+                          </div>
+                          <div class="d-flex justify-space-between">
+                            <span>ESI:</span>
+                            <span class="font-weight-bold">₹{{ emp.esi_employee_amount }}</span>
+                          </div>
+                          <div class="d-flex justify-space-between text-success">
+                            <span>Net Pay:</span>
+                            <span class="font-weight-bold">₹{{ emp.net_payable?.toLocaleString() }}</span>
+                          </div>
+                        </v-list-item-subtitle>
+                      </v-list-item>
+                      <v-divider v-if="index < statutoryComputation.result.employee_results.length - 1"></v-divider>
+                    </template>
+                  </v-list>
+                </v-card>
+              </div>
+            </v-expand-transition>
+          </div>
         </div>
 
         <v-divider></v-divider>

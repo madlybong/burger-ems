@@ -11,21 +11,21 @@ portal.use("/*", jwt({ secret: SECRET }));
 
 // Profile
 portal.get("/me", (c) => {
-    const payload = c.get("jwtPayload");
-    const emp = db.query(`
+  const payload = c.get("jwtPayload");
+  const emp = db.query(`
         SELECT id, name, skill_type, daily_wage, uan, pf_applicable, esi_applicable, gp_number, active, username 
         FROM employees WHERE id = ?
     `).get(payload.id);
 
-    if (!emp) return c.json({ error: "Not found" }, 404);
-    return c.json(emp);
+  if (!emp) return c.json({ error: "Not found" }, 404);
+  return c.json(emp);
 });
 
 // Attendance History
 portal.get("/attendance", (c) => {
-    const payload = c.get("jwtPayload");
-    // History of billing periods where this employee is present
-    const history = db.query(`
+  const payload = c.get("jwtPayload");
+  // History of billing periods where this employee is present
+  const history = db.query(`
         SELECT 
             be.days_worked, be.wage_amount,
             bp.from_date, bp.to_date, bp.label,
@@ -37,15 +37,15 @@ portal.get("/attendance", (c) => {
         WHERE be.employee_id = ?
         ORDER BY bp.from_date DESC
     `).all(payload.id);
-    return c.json(history);
+  return c.json(history);
 });
 
 // Simple Payslip Generation on the fly
 portal.get("/payslip/:id", async (c) => {
-    const payload = c.get("jwtPayload");
-    const billingPeriodId = c.req.param("id");
+  const payload = c.get("jwtPayload");
+  const billingPeriodId = c.req.param("id");
 
-    const record = db.query(`
+  const record = db.query(`
         SELECT 
             be.*, 
             e.name as emp_name, e.uan, e.gp_number, e.skill_type, e.daily_wage,
@@ -58,10 +58,10 @@ portal.get("/payslip/:id", async (c) => {
         WHERE be.employee_id = ? AND be.billing_period_id = ?
     `).get(payload.id, billingPeriodId) as any;
 
-    if (!record) return c.json({ error: "Record not found" }, 404);
+  if (!record) return c.json({ error: "Record not found" }, 404);
 
-    // Simple HTML Template
-    const html = `
+  // Simple HTML Template
+  const html = `
     <html>
     <head>
       <style>
@@ -107,15 +107,87 @@ portal.get("/payslip/:id", async (c) => {
     </html>
     `;
 
-    try {
-        const pdfBytes = await generatePDF(html);
-        c.header("Content-Type", "application/pdf");
-        c.header("Content-Disposition", `attachment; filename="Payslip_${record.from_date}.pdf"`);
-        return c.body(pdfBytes as any);
-    } catch (e) {
-        console.error(e);
-        return c.json({ error: "Generation failed" }, 500);
-    }
+  try {
+    const pdfBytes = await generatePDF(html);
+    c.header("Content-Type", "application/pdf");
+    c.header("Content-Disposition", `attachment; filename="Payslip_${record.from_date}.pdf"`);
+    return c.body(pdfBytes as any);
+  } catch (e) {
+    console.error(e);
+    return c.json({ error: "Generation failed" }, 500);
+  }
+});
+
+// Statutory Deductions (PF/ESI) History
+portal.get("/statutory", (c) => {
+  const payload = c.get("jwtPayload");
+
+  // Get statutory deductions for this employee across all finalized billing periods
+  const statutory = db.query(`
+        SELECT 
+            bes.gross_wage,
+            bes.pf_applicable,
+            bes.pf_employee_amount,
+            bes.pf_employer_amount,
+            bes.esi_applicable,
+            bes.esi_employee_amount,
+            bes.esi_employer_amount,
+            bes.total_employee_deduction,
+            bes.net_payable,
+            bp.from_date,
+            bp.to_date,
+            bp.label,
+            bp.id as billing_period_id,
+            p.site_name,
+            p.client_name,
+            bpsc.computed_at
+        FROM billing_employee_statutory bes
+        JOIN billing_period_statutory_computation bpsc ON bes.computation_id = bpsc.id
+        JOIN billing_periods bp ON bpsc.billing_period_id = bp.id
+        JOIN projects p ON bp.project_id = p.id
+        WHERE bes.employee_id = ?
+        ORDER BY bp.from_date DESC
+    `).all(payload.id);
+
+  return c.json(statutory);
+});
+
+// Statutory Detail for a specific period
+portal.get("/statutory/:billingPeriodId", (c) => {
+  const payload = c.get("jwtPayload");
+  const billingPeriodId = c.req.param("billingPeriodId");
+
+  const detail = db.query(`
+        SELECT 
+            bes.*,
+            bp.from_date,
+            bp.to_date,
+            bp.label,
+            p.site_name,
+            p.client_name,
+            bpsc.computed_at,
+            bpsc.config_snapshot
+        FROM billing_employee_statutory bes
+        JOIN billing_period_statutory_computation bpsc ON bes.computation_id = bpsc.id
+        JOIN billing_periods bp ON bpsc.billing_period_id = bp.id
+        JOIN projects p ON bp.project_id = p.id
+        WHERE bes.employee_id = ? AND bp.id = ?
+    `).get(payload.id, billingPeriodId) as any;
+
+  if (!detail) {
+    return c.json({ error: "No statutory data found for this period" }, 404);
+  }
+
+  // Parse config snapshot
+  if (detail.config_snapshot) {
+    detail.config_snapshot = JSON.parse(detail.config_snapshot);
+  }
+
+  // Convert boolean fields
+  detail.pf_applicable = !!detail.pf_applicable;
+  detail.esi_applicable = !!detail.esi_applicable;
+
+  return c.json(detail);
 });
 
 export default portal;

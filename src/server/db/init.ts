@@ -86,6 +86,91 @@ export function initDB() {
     );
   `);
 
+  db.run(`
+    CREATE TABLE IF NOT EXISTS billing_period_statutory_computation (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      billing_period_id INTEGER NOT NULL,
+      config_snapshot TEXT NOT NULL,
+      computed_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      locked BOOLEAN DEFAULT 0,
+      total_gross_wages REAL NOT NULL DEFAULT 0,
+      total_pf_employee REAL NOT NULL DEFAULT 0,
+      total_pf_employer REAL NOT NULL DEFAULT 0,
+      total_esi_employee REAL NOT NULL DEFAULT 0,
+      total_esi_employer REAL NOT NULL DEFAULT 0,
+      total_employee_deductions REAL NOT NULL DEFAULT 0,
+      total_employer_contributions REAL NOT NULL DEFAULT 0,
+      total_net_payable REAL NOT NULL DEFAULT 0,
+      FOREIGN KEY(billing_period_id) REFERENCES billing_periods(id),
+      UNIQUE(billing_period_id)
+    );
+  `);
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS billing_employee_statutory (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      computation_id INTEGER NOT NULL,
+      employee_id INTEGER NOT NULL,
+      gross_wage REAL NOT NULL DEFAULT 0,
+      basic_wage REAL NOT NULL DEFAULT 0,
+      custom_wage REAL NOT NULL DEFAULT 0,
+      pf_applicable BOOLEAN DEFAULT 0,
+      pf_wage_basis REAL NOT NULL DEFAULT 0,
+      pf_wage_capped REAL NOT NULL DEFAULT 0,
+      pf_employee_amount REAL NOT NULL DEFAULT 0,
+      pf_employer_amount REAL NOT NULL DEFAULT 0,
+      pf_total_amount REAL NOT NULL DEFAULT 0,
+      pf_explanation TEXT,
+      esi_applicable BOOLEAN DEFAULT 0,
+      esi_wage_basis REAL NOT NULL DEFAULT 0,
+      esi_employee_amount REAL NOT NULL DEFAULT 0,
+      esi_employer_amount REAL NOT NULL DEFAULT 0,
+      esi_total_amount REAL NOT NULL DEFAULT 0,
+      esi_explanation TEXT,
+      total_employee_deduction REAL NOT NULL DEFAULT 0,
+      total_employer_contribution REAL NOT NULL DEFAULT 0,
+      net_payable REAL NOT NULL DEFAULT 0,
+      FOREIGN KEY(computation_id) REFERENCES billing_period_statutory_computation(id) ON DELETE CASCADE,
+      FOREIGN KEY(employee_id) REFERENCES employees(id),
+      UNIQUE(computation_id, employee_id)
+    );
+  `);
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS statutory_config (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      company_id INTEGER NOT NULL,
+      pf_enabled BOOLEAN DEFAULT 1,
+      pf_wage_basis TEXT DEFAULT 'gross' CHECK(pf_wage_basis IN ('gross', 'basic', 'custom')),
+      pf_employee_rate REAL DEFAULT 12.0,
+      pf_employer_rate REAL DEFAULT 12.0,
+      pf_wage_ceiling REAL DEFAULT 15000.0,
+      pf_enforce_ceiling BOOLEAN DEFAULT 1,
+      esi_enabled BOOLEAN DEFAULT 1,
+      esi_threshold REAL DEFAULT 21000.0,
+      esi_employee_rate REAL DEFAULT 0.75,
+      esi_employer_rate REAL DEFAULT 3.25,
+      rounding_mode TEXT DEFAULT 'round' CHECK(rounding_mode IN ('round', 'floor', 'ceil')),
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(company_id) REFERENCES companies(id),
+      UNIQUE(company_id)
+    );
+  `);
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS statutory_overrides (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      employee_statutory_id INTEGER NOT NULL,
+      field_name TEXT NOT NULL CHECK(field_name IN ('pf_employee_amount', 'pf_employer_amount', 'esi_employee_amount', 'esi_employer_amount')),
+      original_value REAL NOT NULL,
+      override_value REAL NOT NULL,
+      reason TEXT NOT NULL,
+      overridden_by TEXT DEFAULT 'admin',
+      overridden_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(employee_statutory_id) REFERENCES billing_employee_statutory(id) ON DELETE CASCADE
+    );
+  `);
+
   console.log("Database initialized successfully.");
 
   // MIGRATIONS
@@ -106,6 +191,31 @@ export function initDB() {
     // We settle for creating text column, populating it, then creating unique index.
     db.run("UPDATE employees SET username = 'EMP' || id WHERE username IS NULL");
     db.run("CREATE UNIQUE INDEX IF NOT EXISTS idx_employees_username ON employees(username)");
+  }
+
+  // Ensure all companies have statutory config
+  const companies = db.query("SELECT id FROM companies").all() as any[];
+  for (const company of companies) {
+    const existing = db.query("SELECT id FROM statutory_config WHERE company_id = ?").get(company.id);
+    if (!existing) {
+      console.log(`Migrating: Creating default statutory config for company ${company.id}`);
+      db.run(`
+        INSERT INTO statutory_config (
+          company_id, pf_enabled, pf_wage_basis, pf_employee_rate, pf_employer_rate,
+          pf_wage_ceiling, pf_enforce_ceiling, esi_enabled, esi_threshold,
+          esi_employee_rate, esi_employer_rate, rounding_mode
+        ) VALUES (?, 1, 'gross', 12.0, 12.0, 15000.0, 1, 1, 21000.0, 0.75, 3.25, 'round')
+      `, [company.id]);
+    }
+  }
+
+  // Add status and finalized_at to billing_periods if not exists
+  const billingInfo = db.query("PRAGMA table_info(billing_periods)").all() as any[];
+
+  if (!billingInfo.some(c => c.name === 'status')) {
+    console.log("Migrating: Adding status and finalized_at to billing_periods");
+    db.run("ALTER TABLE billing_periods ADD COLUMN status TEXT DEFAULT 'draft' CHECK(status IN ('draft', 'finalized'))");
+    db.run("ALTER TABLE billing_periods ADD COLUMN finalized_at TEXT");
   }
 }
 

@@ -16,6 +16,9 @@ import generate from "./api/generate";
 import upload from "./api/upload";
 import auth from "./api/auth";
 import portal from "./api/portal";
+import statutory from "./api/statutory";
+import statutoryComputation from "./api/statutory-computation";
+import statutoryOverrides from "./api/statutory-overrides";
 import { initDB } from "./db/init";
 
 // Initialize database (run migrations)
@@ -30,6 +33,9 @@ app.route("/api/generate", generate);
 app.route("/api/upload", upload);
 app.route("/api/auth", auth);
 app.route("/api/portal", portal);
+app.route("/api/statutory", statutory);
+app.route("/api/statutory-computation", statutoryComputation);
+app.route("/api/statutory-overrides", statutoryOverrides);
 
 // Serve frontend (to be built later)
 app.use("/*", serveStatic({ root: "./dist" }));

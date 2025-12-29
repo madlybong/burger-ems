@@ -2,6 +2,99 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.2] - 2025-12-29
+
+### Added - PF/ESI Statutory Compliance System (Phase 2.2)
+
+#### Configuration Management
+- **Statutory Configuration Page**: Admin-only settings page for PF and ESI parameters
+- **Company-Level Settings**: Configure PF wage basis (gross/basic/custom), employee/employer rates, wage ceiling, and enforcement
+- **ESI Configuration**: Set threshold, employee/employer rates
+- **Rounding Modes**: Support for round/floor/ceil rounding methods
+- **Indian Statutory Defaults**: Pre-configured with 2024 Indian norms (PF: 12%/12%, ₹15k ceiling; ESI: 0.75%/3.25%, ₹21k threshold)
+
+#### Computation Engine
+- **Pure Computation Module**: Deterministic PF/ESI calculation engine with no side effects
+- **100% Test Coverage**: 11 comprehensive unit tests covering all scenarios
+- **Wage Basis Support**: Calculate on gross, basic (50%), or custom wage amounts
+- **Ceiling Enforcement**: Automatic PF wage ceiling application
+- **Threshold Validation**: ESI applicability based on wage threshold
+- **Explainable Results**: Human-readable explanation strings for all calculations
+
+#### Data Persistence
+- **Immutable Storage**: Computation results stored with configuration snapshot
+- **Audit Trail**: Complete timestamp and configuration tracking
+- **Lock Mechanism**: Prevent recomputation of finalized periods
+- **Cascading Deletes**: Automatic cleanup of related records
+- **Idempotent Operations**: Safe to retry without data duplication
+
+#### Billing Period Lifecycle
+- **Finalization Workflow**: One-click finalize button triggers PF/ESI computation
+- **Status Tracking**: Draft vs Finalized status for billing periods
+- **Automatic Computation**: PF/ESI calculated and locked on finalization
+- **Validation**: Ensures employees exist before finalization
+- **Statutory Summary**: Returns aggregate PF/ESI totals on finalization
+
+#### Admin UI Integration
+- **Statutory Section**: Dedicated section in billing detail sidebar
+- **Mobile Tab**: Separate "Statutory" tab for mobile devices
+- **Finalize Button**: Prominent button with confirmation dialog
+- **PF/ESI Totals**: Display employee and employer contributions
+- **Employee Breakdown**: Expandable list showing per-employee deductions
+- **Net Payable**: Shows final amount after deductions
+- **Status Indicators**: Visual feedback for finalized vs draft periods
+
+#### Override Management
+- **Manual Adjustments**: Admin can override PF/ESI amounts with reason
+- **Complete Audit Trail**: Tracks original value, override value, reason, who, and when
+- **Automatic Recalculation**: Employee and billing period totals updated automatically
+- **Lock Enforcement**: Cannot override locked computations without unlocking
+- **Reversible Operations**: Overrides can be removed to restore original values
+- **Field-Level Overrides**: Support for PF employee/employer and ESI employee/employer amounts
+
+#### Employee Portal
+- **Statutory History**: Employees can view their PF/ESI deductions across all periods
+- **Detailed Breakdown**: Per-period view with PF, ESI, and net payable
+- **Read-Only Access**: Employees cannot edit or override values
+- **Privacy Protected**: JWT authentication ensures employees only see their own data
+- **Explanation Strings**: Transparent calculation details for employee understanding
+
+### Database Schema
+- **statutory_config**: Company-level PF/ESI configuration
+- **billing_period_statutory_computation**: Aggregate computation results per billing period
+- **billing_employee_statutory**: Employee-level statutory details
+- **statutory_overrides**: Manual adjustment audit trail
+- **billing_periods**: Added `status` (draft/finalized) and `finalized_at` fields
+
+### API Endpoints
+- `GET/PUT /api/statutory` - Configuration management
+- `POST /api/billing/:id/finalize` - Finalize billing period
+- `GET /api/statutory-computation/:id` - Retrieve computation
+- `POST /api/statutory-computation/:id/compute` - Manual computation
+- `POST /api/statutory-computation/:id/lock` - Lock computation
+- `POST /api/statutory-computation/:id/unlock` - Unlock computation
+- `POST /api/statutory-overrides/:id/override` - Apply override
+- `DELETE /api/statutory-overrides/:id` - Remove override
+- `GET /api/portal/statutory` - Employee statutory history
+- `GET /api/portal/statutory/:id` - Employee statutory detail
+
+### Documentation
+- **PHASE_2.2_STEP_1.md**: Statutory configuration
+- **PHASE_2.2_STEP_2.md**: Computation engine
+- **PHASE_2.2_STEP_3.md**: Computation persistence
+- **PHASE_2.2_STEP_4.md**: Billing period finalization
+- **PHASE_2.2_STEP_5.md**: UI integration
+- **PHASE_2.2_STEP_6.md**: Statutory overrides
+- **PHASE_2.2_STEP_7.md**: Employee portal view
+- **PHASE_2.2_SUMMARY.md**: Complete implementation summary
+
+### Technical Details
+- **Code Added**: ~2,650 lines of backend code, ~450 lines of frontend code
+- **Tests**: 11 unit tests with 100% pass rate
+- **Performance**: O(n) computation where n = number of employees
+- **Storage**: ~1KB per employee per billing period
+- **Security**: JWT authentication, role-based access, lock enforcement
+
 ## [0.1.0] - 2025-12-28
 
 ### Added - Authentication & Security
