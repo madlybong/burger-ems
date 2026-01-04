@@ -19,6 +19,8 @@ import portal from "./api/portal";
 import statutory from "./api/statutory";
 import statutoryComputation from "./api/statutory-computation";
 import statutoryOverrides from "./api/statutory-overrides";
+import attendance from "./api/attendance";
+import overtimeConfig from "./api/overtime-config";
 import { initDB } from "./db/init";
 
 // Initialize database (run migrations)
@@ -36,14 +38,22 @@ app.route("/api/portal", portal);
 app.route("/api/statutory", statutory);
 app.route("/api/statutory-computation", statutoryComputation);
 app.route("/api/statutory-overrides", statutoryOverrides);
+app.route("/api/attendance", attendance);
+app.route("/api/overtime-config", overtimeConfig);
 
 // Serve frontend (to be built later)
 app.use("/*", serveStatic({ root: "./dist" }));
 app.get("*", serveStatic({ path: "./dist/index.html" }));
 
-console.log("Server running on port 3000");
+const port = 8765;
 
-export default {
-    port: 3000,
-    fetch: app.fetch,
-};
+try {
+    Bun.serve({
+        port,
+        fetch: app.fetch,
+    });
+    console.log(`Server running on port ${port}`);
+} catch (e) {
+    console.error(`Failed to start on port ${port}:`, e);
+    process.exit(1);
+}

@@ -22,6 +22,7 @@ export interface Employee {
     esi_applicable: boolean;
     gp_number: string | null;
     active: boolean;
+    username?: string;
 }
 
 export interface BillingPeriod {

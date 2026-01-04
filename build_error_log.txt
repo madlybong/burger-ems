@@ -1,0 +1,19 @@
+$ bun run build:ui && bun run build:server
+$ vue-tsc -b && vite build
+scripts/test_date_validation.ts(8,22): error TS1375: 'await' expressions are only allowed at the top level of a file when that file is a module, but this file has no imports or exports. Consider adding an empty 'export {}' to make this file a module.
+scripts/test_date_validation.ts(19,18): error TS1375: 'await' expressions are only allowed at the top level of a file when that file is a module, but this file has no imports or exports. Consider adding an empty 'export {}' to make this file a module.
+scripts/test_date_validation.ts(30,29): error TS18046: 'error' is of type 'unknown'.
+scripts/test_date_validation.ts(36,22): error TS1375: 'await' expressions are only allowed at the top level of a file when that file is a module, but this file has no imports or exports. Consider adding an empty 'export {}' to make this file a module.
+scripts/test_date_validation.ts(47,18): error TS1375: 'await' expressions are only allowed at the top level of a file when that file is a module, but this file has no imports or exports. Consider adding an empty 'export {}' to make this file a module.
+scripts/test_date_validation.ts(54,32): error TS1375: 'await' expressions are only allowed at the top level of a file when that file is a module, but this file has no imports or exports. Consider adding an empty 'export {}' to make this file a module.
+scripts/test_date_validation.ts(66,29): error TS18046: 'error' is of type 'unknown'.
+scripts/test_date_validation.ts(72,22): error TS1375: 'await' expressions are only allowed at the top level of a file when that file is a module, but this file has no imports or exports. Consider adding an empty 'export {}' to make this file a module.
+scripts/test_date_validation.ts(83,18): error TS1375: 'await' expressions are only allowed at the top level of a file when that file is a module, but this file has no imports or exports. Consider adding an empty 'export {}' to make this file a module.
+scripts/test_date_validation.ts(94,29): error TS18046: 'error' is of type 'unknown'.
+src/ui/pages/BillingDetail.vue(51,67): error TS2345: Argument of type 'number | undefined' is not assignable to parameter of type 'number'.
+  Type 'undefined' is not assignable to type 'number'.
+src/ui/pages/BillingDetail.vue(565,40): error TS2365: Operator '<' cannot be applied to types 'string | number' and 'number'.
+src/ui/pages/Employees.vue(134,39): error TS2339: Property 'username' does not exist on type 'Employee'.
+src/ui/pages/Employees.vue(212,70): error TS2339: Property 'username' does not exist on type '{ id?: number | undefined; company_id: number; name: string; skill_type: "unskilled" | "skilled" | "supervisor" | "engineer"; daily_wage: number; uan: string | null; pf_applicable: boolean; esi_applicable: boolean; gp_number: string | null; active: boolean; }'.
+error: script "build:ui" exited with code 1
+error: script "build" exited with code 1

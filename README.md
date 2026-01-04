@@ -8,26 +8,29 @@
 ## Target Audience
 Indian public-sector contractors working with organizations like SAIL, IOCL, and other PSUs.
 
-## Key Features (v0.1.0)
+## Key Features (v0.1.5)
 - **Multi-Role Authentication**: Secure JWT-based authentication with Admin and Employee roles
 - **Employee Management**: Complete CRUD with auto-generated secure credentials and password reset
-- **Attendance & Wages**: Editable table UI with Excel upload support
+- **Attendance Workspace**: Calendar-based attendance tracking, holiday management, and virtualized lists for performance.
+- **Statutory Compliance**: Automated PF/ESI calculation engine with 2024 Indian norms.
+- **Overtime Management**: Configurable OT limits, rates, and approval workflow.
 - **Document Generation**: Automated PDF generation for Attendance Summary, Wage Disbursement, and GP Declaration
 - **Offline Capable**: Local SQLite database, single executable distribution
 - **Strong Security**: Password hashing, role-based access control, and first-time password change enforcement
 
-## Phase-1 Scope
+## Phase-1 Scope (Completed)
 - **Single Company Support**: Default seeded with 'NRD Global'
 - **Core Modules**: Employees, Projects (Work Orders), Billing Periods
-- **Authentication**: Admin and Employee portals with secure login
-- **Password Management**: Auto-generated strong passwords with admin reset capability
-- **Compliance Documents**: PDF generation for statutory requirements
+- **Attendance**: Calendar view with status cycle (Full/Half/Absent/WeekOff).
+- **Statutory**: PF/ESI computation engine with overrides.
+- **Security**: Admin and Employee portals with role-based access.
+- **Documentation**: Comprehensive Developer and User guides (`docs/`).
 
-## Intentionally Missing (Phase-2)
-- PF / ESI Calculations (Fields exist, calculations manual for now)
+## Upcoming (Phase-2)
 - Multi-company UI
 - Accounting / GST Integration
 - Advanced reporting and analytics
+- Mobile App (Native)
 
 ## How to Run Locally
 

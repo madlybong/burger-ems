@@ -63,6 +63,11 @@ const routes = [
                 component: () => import('../pages/BillingDetail.vue'),
             },
             {
+                path: '/billing/:id/attendance',
+                name: 'AttendanceWorkspace',
+                component: () => import('../pages/AttendanceWorkspace.vue'),
+            },
+            {
                 path: '/settings',
                 name: 'Settings',
                 component: () => import('../pages/Settings.vue'),

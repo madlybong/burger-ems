@@ -27,6 +27,8 @@ const periods = ref<BillingPeriod[]>([]);
 const projects = ref<Project[]>([]);
 const loading = ref(false);
 const dialog = ref(false);
+const error = ref<string | null>(null);
+const saving = ref(false);
 
 function getDefaultPeriod(): BillingPeriod {
   return {
@@ -57,6 +59,9 @@ async function fetchData() {
 }
 
 function openDialog(item?: BillingPeriod) {
+  // Clear error when opening dialog
+  error.value = null;
+
   if (item) {
     editedItem.value = { ...item };
   } else {
@@ -70,26 +75,82 @@ function openDialog(item?: BillingPeriod) {
 }
 
 async function save() {
+  // Clear previous error
+  error.value = null;
+
+  // Validate date range
+  if (!editedItem.value.from_date || !editedItem.value.to_date) {
+    error.value = 'Both start and end dates are required.';
+    return;
+  }
+
+  const fromDate = new Date(editedItem.value.from_date);
+  const toDate = new Date(editedItem.value.to_date);
+
+  if (toDate < fromDate) {
+    error.value = 'End date must be after start date.';
+    return;
+  }
+
+  // Validate project selection
+  if (!editedItem.value.project_id) {
+    error.value = 'Please select a project.';
+    return;
+  }
+
   const method = isNew.value ? 'POST' : 'PUT';
   const url = isNew.value ? '/api/billing' : `/api/billing/${editedItem.value.id}`;
 
+  saving.value = true;
   try {
     const res = await fetch(url, {
       method,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(editedItem.value)
     });
+
     if (res.ok) {
       dialog.value = false;
-      fetchData();
+      error.value = null;
+      await fetchData();
+    } else {
+      // Handle server errors
+      const errorData = await res.json().catch(() => ({ error: 'Failed to save billing period' }));
+      error.value = errorData.error || 'Failed to save billing period. Please try again.';
     }
   } catch (e) {
-    console.error(e);
+    console.error('Error saving billing period:', e);
+    error.value = 'Connection error. Please check your network and try again.';
+  } finally {
+    saving.value = false;
   }
 }
 
 function openDetail(item: BillingPeriod) {
   router.push({ name: 'BillingDetail', params: { id: item.id } });
+}
+
+async function deletePeriod(item: BillingPeriod) {
+  if (!confirm(`Are you sure you want to delete this billing period? All related attendance and statutory data will be lost.`)) return;
+
+  try {
+    const res = await fetch(`/api/billing/${item.id}`, { method: 'DELETE' });
+    if (res.ok) {
+      await fetchData();
+    } else {
+      let errorMsg = 'Failed to delete';
+      try {
+        const err = await res.json();
+        if (err.error) errorMsg = err.error;
+      } catch {
+        console.warn('Non-JSON error response');
+      }
+      alert(errorMsg);
+    }
+  } catch (e) {
+    console.error(e);
+    alert('An unexpected error occurred');
+  }
 }
 
 function formatDate(date: string) {
@@ -127,6 +188,7 @@ onMounted(fetchData);
       <template v-slot:item.actions="{ item }">
         <v-btn size="small" variant="text" color="primary" @click="openDetail(item)">Manage</v-btn>
         <v-icon size="small" class="me-2" @click="openDialog(item)">mdi-pencil</v-icon>
+        <v-icon size="small" color="error" @click="deletePeriod(item)">mdi-delete</v-icon>
       </template>
       <template v-slot:no-data>
         <div class="pa-5 text-center">
@@ -166,10 +228,16 @@ onMounted(fetchData);
             </v-row>
           </v-container>
         </v-card-text>
+
+        <!-- Error Alert -->
+        <v-alert v-if="error" type="error" variant="tonal" class="mx-4 mb-2">
+          {{ error }}
+        </v-alert>
+
         <v-card-actions>
           <v-spacer></v-spacer>
-          <v-btn color="medium-emphasis" variant="text" @click="dialog = false">Cancel</v-btn>
-          <v-btn color="primary" @click="save">Save</v-btn>
+          <v-btn color="medium-emphasis" variant="text" @click="dialog = false" :disabled="saving">Cancel</v-btn>
+          <v-btn color="primary" @click="save" :loading="saving" :disabled="saving">Save</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>

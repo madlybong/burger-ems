@@ -15,6 +15,8 @@ const billingEmployees = ref<BillingEmployee[]>([]);
 const allEmployees = ref<Employee[]>([]);
 const loading = ref(false);
 const dialog = ref(false);
+const deleteDialog = ref(false);
+const employeeToDelete = ref<BillingEmployee | null>(null);
 
 // Statutory computation state
 const statutoryComputation = ref<any>(null);
@@ -32,6 +34,7 @@ const headers = [
 ];
 
 const selectedEmployeeId = ref<number | null>(null);
+const daysWorked = ref<number>(0);
 const fileInput = ref<HTMLInputElement | null>(null);
 const generatingWage = ref(false);
 const generatingAttendance = ref(false);
@@ -41,6 +44,12 @@ const lastGenerated = ref<{ type: 'wage' | 'attendance', url: string, time: stri
 const totalWages = computed(() => billingEmployees.value.reduce((sum, e) => sum + (e.wage_amount || 0), 0));
 const totalDays = computed(() => billingEmployees.value.reduce((sum, e) => sum + (e.days_worked || 0), 0));
 const employeeCount = computed(() => billingEmployees.value.length);
+
+// Available employees for attendance (active, not already added)
+const availableEmployees = computed(() => {
+  const addedIds = new Set(billingEmployees.value.map(e => e.employee_id));
+  return allEmployees.value.filter(e => e.active && e.id && !addedIds.has(e.id));
+});
 
 async function fetchData() {
   loading.value = true;
@@ -62,13 +71,37 @@ async function fetchData() {
 
 function openAddDialog() {
   selectedEmployeeId.value = null;
+  daysWorked.value = 0;
   dialog.value = true;
 }
 
 async function addEntry() {
-  if (!selectedEmployeeId.value) return;
+  if (!selectedEmployeeId.value) {
+    alert('Please select an employee.');
+    return;
+  }
+
+  if (daysWorked.value < 0) {
+    alert('Days worked cannot be negative.');
+    return;
+  }
+
   const emp = allEmployees.value.find(e => e.id === selectedEmployeeId.value);
-  if (!emp || !emp.id) return; // Ensure ID exists
+  if (!emp || !emp.id) {
+    alert('Invalid employee selection.');
+    return;
+  }
+
+  // Double-check if employee already exists (shouldn't happen with filtering)
+  const exists = billingEmployees.value.find(e => e.employee_id === emp.id);
+  if (exists) {
+    alert('This employee is already added to this billing period.');
+    dialog.value = false;
+    return;
+  }
+
+  // Calculate wage amount
+  const wage = (daysWorked.value || 0) * (emp.daily_wage || 0);
 
   // Optimistic UI update
   const newEntry: BillingEmployee = {
@@ -77,17 +110,13 @@ async function addEntry() {
     name: emp.name,
     skill_type: emp.skill_type,
     daily_wage: emp.daily_wage,
-    days_worked: 0,
-    wage_amount: 0,
+    days_worked: daysWorked.value || 0,
+    wage_amount: wage,
     uan: emp.uan,
     gp_number: emp.gp_number
   };
 
-  // Check if exists
-  if (!billingEmployees.value.find(e => e.employee_id === emp.id)) {
-    billingEmployees.value.push(newEntry);
-  }
-
+  billingEmployees.value.push(newEntry);
   dialog.value = false;
   await updateEntry(newEntry);
 }
@@ -112,9 +141,40 @@ async function updateEntry(item: BillingEmployee) {
   }
 }
 
-async function removeEntry(item: BillingEmployee) {
-  item.days_worked = 0;
-  await updateEntry(item);
+function confirmDelete(item: BillingEmployee) {
+  employeeToDelete.value = item;
+  deleteDialog.value = true;
+}
+
+async function removeEntry() {
+  if (!employeeToDelete.value) return;
+
+  const item = employeeToDelete.value;
+  deleteDialog.value = false;
+
+  try {
+    // Remove from UI immediately (optimistic update)
+    const index = billingEmployees.value.findIndex(e => e.employee_id === item.employee_id);
+    if (index > -1) {
+      billingEmployees.value.splice(index, 1);
+    }
+
+    // Delete from backend
+    const res = await fetch(`/api/billing/${id}/employees/${item.employee_id}`, {
+      method: 'DELETE'
+    });
+
+    if (!res.ok) {
+      throw new Error('Delete failed');
+    }
+  } catch (e) {
+    console.error("Failed to remove employee", e);
+    // Re-add to UI if API call failed
+    billingEmployees.value.push(item);
+    alert('Failed to remove employee. Please try again.');
+  } finally {
+    employeeToDelete.value = null;
+  }
 }
 
 async function generatePDF(type: 'attendance' | 'wage') {
@@ -207,9 +267,9 @@ async function finalizeBillingPeriod() {
     const res = await fetch(`/api/billing/${id}/finalize`, {
       method: 'POST'
     });
-    
+
     const data = await res.json();
-    
+
     if (data.success || data.finalized) {
       alert(data.message || 'Billing period finalized successfully');
       await fetchData();
@@ -267,9 +327,14 @@ onMounted(() => {
             class="text-caption font-weight-bold d-none d-sm-flex" @click="triggerUpload">Import Excel</v-btn>
           <v-btn icon="mdi-microsoft-excel" color="success" class="d-flex d-sm-none" @click="triggerUpload"></v-btn>
 
-          <v-btn prepend-icon="mdi-account-plus" color="primary"
-            class="ms-2 text-caption font-weight-bold d-none d-sm-flex" @click="openAddDialog">Add Manpower</v-btn>
-          <v-btn icon="mdi-account-plus" color="primary" class="d-flex d-sm-none ms-1" @click="openAddDialog"></v-btn>
+          <v-btn prepend-icon="mdi-calendar-plus" color="primary"
+            class="ms-2 text-caption font-weight-bold d-none d-sm-flex" @click="openAddDialog">Add Attendance</v-btn>
+          <v-btn icon="mdi-calendar-plus" color="primary" class="d-flex d-sm-none ms-1" @click="openAddDialog"></v-btn>
+
+          <v-btn prepend-icon="mdi-calendar-edit" color="secondary" variant="tonal"
+            class="ms-2 text-caption font-weight-bold d-none d-sm-flex" :to="`/billing/${id}/attendance`">
+            Prepare Attendance
+          </v-btn>
         </v-toolbar>
 
         <!-- Info Banner -->
@@ -298,18 +363,16 @@ onMounted(() => {
             <tr>
               <template v-for="column in (columns as any)" :key="column.key">
                 <th
-                  :class="['text-caption font-weight-bold text-uppercase text-medium-emphasis bg-surface-variant border-b', column.align === 'end' ? 'text-end' : 'text-start']"
-                  :style="{ width: column.width }">
+                  :class="['text-caption font-weight-bold text-uppercase text-high-emphasis bg-surface border-b-lg', column.align === 'end' ? 'text-end' : 'text-start']"
+                  :style="{ width: column.width, padding: '12px 16px' }">
                   {{ column.title }}
                 </th>
               </template>
             </tr>
           </template>
-          <!-- Inline Edit: Days Worked -->
+          <!-- Read-only Days Worked -->
           <template v-slot:item.days_worked="{ item }">
-            <v-text-field v-model.number="(item as any).days_worked" type="number" variant="plain" hide-details
-              density="compact" class="font-weight-bold text-body-2" style="max-width: 80px"
-              @change="updateEntry(item)"></v-text-field>
+            <span class="text-body-2 font-weight-bold">{{ item.days_worked || 0 }}</span>
           </template>
 
           <template v-slot:item.daily_wage="{ item }">
@@ -324,7 +387,7 @@ onMounted(() => {
 
           <template v-slot:item.actions="{ item }">
             <v-btn icon="mdi-delete" size="x-small" variant="text" color="medium-emphasis"
-              @click="removeEntry(item)"></v-btn>
+              @click="confirmDelete(item)"></v-btn>
           </template>
           <template v-slot:no-data>
             <div class="d-flex flex-column align-center justify-center py-10">
@@ -431,11 +494,13 @@ onMounted(() => {
                 <div class="text-caption font-weight-bold text-uppercase text-medium-emphasis mb-2">PF Deductions</div>
                 <div class="d-flex justify-space-between align-center mb-1">
                   <span class="text-caption">Employee</span>
-                  <span class="text-body-2 font-weight-bold">₹{{ statutoryComputation.result?.total_pf_employee?.toLocaleString() || 0 }}</span>
+                  <span class="text-body-2 font-weight-bold">₹{{
+                    statutoryComputation.result?.total_pf_employee?.toLocaleString() || 0 }}</span>
                 </div>
                 <div class="d-flex justify-space-between align-center">
                   <span class="text-caption">Employer</span>
-                  <span class="text-body-2 font-weight-bold">₹{{ statutoryComputation.result?.total_pf_employer?.toLocaleString() || 0 }}</span>
+                  <span class="text-body-2 font-weight-bold">₹{{
+                    statutoryComputation.result?.total_pf_employer?.toLocaleString() || 0 }}</span>
                 </div>
               </v-card-text>
             </v-card>
@@ -445,19 +510,24 @@ onMounted(() => {
                 <div class="text-caption font-weight-bold text-uppercase text-medium-emphasis mb-2">ESI Deductions</div>
                 <div class="d-flex justify-space-between align-center mb-1">
                   <span class="text-caption">Employee</span>
-                  <span class="text-body-2 font-weight-bold">₹{{ statutoryComputation.result?.total_esi_employee?.toLocaleString() || 0 }}</span>
+                  <span class="text-body-2 font-weight-bold">₹{{
+                    statutoryComputation.result?.total_esi_employee?.toLocaleString() || 0 }}</span>
                 </div>
                 <div class="d-flex justify-space-between align-center">
                   <span class="text-caption">Employer</span>
-                  <span class="text-body-2 font-weight-bold">₹{{ statutoryComputation.result?.total_esi_employer?.toLocaleString() || 0 }}</span>
+                  <span class="text-body-2 font-weight-bold">₹{{
+                    statutoryComputation.result?.total_esi_employer?.toLocaleString() || 0 }}</span>
                 </div>
               </v-card-text>
             </v-card>
 
-            <v-card elevation="0" color="success" variant="flat" style="border: 1px solid rgba(var(--v-theme-success), 0.2);">
+            <v-card elevation="0" color="success" variant="flat"
+              style="border: 1px solid rgba(var(--v-theme-success), 0.2);">
               <v-card-text class="pa-3 text-center">
-                <div class="text-caption font-weight-bold text-uppercase mb-1 text-white opacity-90">Total Deductions</div>
-                <div class="text-h5 font-weight-black text-white">₹{{ statutoryComputation.result?.total_employee_deductions?.toLocaleString() || 0 }}</div>
+                <div class="text-caption font-weight-bold text-uppercase mb-1 text-white opacity-90">Total Deductions
+                </div>
+                <div class="text-h5 font-weight-black text-white">₹{{
+                  statutoryComputation.result?.total_employee_deductions?.toLocaleString() || 0 }}</div>
                 <div class="text-caption text-white opacity-70 mt-1">Employee share</div>
               </v-card-text>
             </v-card>
@@ -473,7 +543,8 @@ onMounted(() => {
               <div v-if="showStatutoryDetails" class="mt-3">
                 <v-card elevation="0" border>
                   <v-list density="compact" class="pa-0">
-                    <template v-for="(emp, index) in statutoryComputation.result?.employee_results" :key="emp.employee_id">
+                    <template v-for="(emp, index) in statutoryComputation.result?.employee_results"
+                      :key="emp.employee_id">
                       <v-list-item>
                         <v-list-item-title class="text-caption font-weight-bold">{{ emp.name }}</v-list-item-title>
                         <v-list-item-subtitle class="text-caption mt-1">
@@ -491,7 +562,8 @@ onMounted(() => {
                           </div>
                         </v-list-item-subtitle>
                       </v-list-item>
-                      <v-divider v-if="index < statutoryComputation.result.employee_results.length - 1"></v-divider>
+                      <v-divider
+                        v-if="(index as number) < (statutoryComputation.result.employee_results.length - 1)"></v-divider>
                     </template>
                   </v-list>
                 </v-card>
@@ -541,19 +613,79 @@ onMounted(() => {
     </v-row>
 
     <!-- Dialogs -->
-    <v-dialog v-model="dialog" max-width="500px">
+    <v-dialog v-model="dialog" max-width="550px">
       <v-card>
-        <v-card-title class="text-subtitle-1 font-weight-bold pt-3 ps-4">Add Manpower to Batch</v-card-title>
-        <v-card-text>
-          <v-autocomplete v-model="selectedEmployeeId" :items="allEmployees" item-title="name" item-value="id"
-            label="Select Worker" variant="outlined" density="compact" placeholder="Start typing name..."
-            autofocus></v-autocomplete>
+        <v-card-title class="text-h6 font-weight-bold pt-4 ps-4 pb-2">
+          <v-icon color="primary" class="me-2">mdi-calendar-plus</v-icon>
+          Add Attendance
+        </v-card-title>
+        <v-card-subtitle class="text-caption text-medium-emphasis ps-4 pb-3">
+          Record attendance for an employee in this billing period
+        </v-card-subtitle>
+
+        <v-divider></v-divider>
+
+        <v-card-text class="pt-4 pb-2">
+          <!-- Employee Selection -->
+          <v-autocomplete v-model="selectedEmployeeId" :items="availableEmployees" item-title="name" item-value="id"
+            label="Select Employee" variant="outlined" density="comfortable" placeholder="Start typing name..."
+            :no-data-text="availableEmployees.length === 0 ? 'All active employees already added' : 'No employees found'"
+            autofocus>
+            <template v-slot:item="{ props, item }">
+              <v-list-item v-bind="props">
+                <template v-slot:prepend>
+                  <v-avatar color="primary" variant="tonal" size="32">
+                    <span class="text-caption">{{ item.raw.name.charAt(0) }}</span>
+                  </v-avatar>
+                </template>
+                <template v-slot:subtitle>
+                  <span class="text-caption">{{ item.raw.skill_type }} • ₹{{ item.raw.daily_wage }}/day</span>
+                </template>
+              </v-list-item>
+            </template>
+          </v-autocomplete>
+
+          <!-- Days Worked -->
+          <v-text-field v-model.number="daysWorked" type="number" label="Days Worked" variant="outlined"
+            density="comfortable" hint="Initial attendance count (can be refined in calendar view)" persistent-hint
+            min="0" max="31" class="mt-3"></v-text-field>
+
+          <!-- Info Alert -->
+          <v-alert type="info" variant="tonal" density="compact" class="mt-4 text-caption">
+            <strong>Quick Entry:</strong> This adds the employee with an initial attendance count.
+            Use "Prepare Attendance" for detailed day-by-day tracking.
+          </v-alert>
+        </v-card-text>
+
+        <v-divider></v-divider>
+
+        <v-card-actions class="pa-4">
+          <v-spacer></v-spacer>
+          <v-btn color="medium-emphasis" variant="text" @click="dialog = false">Cancel</v-btn>
+          <v-btn color="primary" variant="flat" @click="addEntry" :disabled="!selectedEmployeeId">
+            Add Attendance
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- Delete Confirmation Dialog -->
+    <v-dialog v-model="deleteDialog" max-width="400px">
+      <v-card>
+        <v-card-title class="text-h6 font-weight-bold pt-4 ps-4">Confirm Deletion</v-card-title>
+        <v-card-text class="pt-2">
+          <div class="text-body-2">
+            Are you sure you want to remove <strong>{{ employeeToDelete?.name }}</strong> from this billing period?
+          </div>
+          <div class="text-caption text-medium-emphasis mt-2">
+            This action cannot be undone.
+          </div>
         </v-card-text>
         <v-divider></v-divider>
         <v-card-actions>
           <v-spacer></v-spacer>
-          <v-btn color="medium-emphasis" variant="text" @click="dialog = false">Close</v-btn>
-          <v-btn color="primary" @click="addEntry">Confirm Add</v-btn>
+          <v-btn color="medium-emphasis" variant="text" @click="deleteDialog = false">Cancel</v-btn>
+          <v-btn color="error" variant="flat" @click="removeEntry">Delete</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>

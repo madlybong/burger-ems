@@ -1,11 +1,18 @@
 <script setup lang="ts">
-import { ref } from 'vue';
-import { useTheme } from 'vuetify';
+import { ref, watch } from 'vue';
+import { useTheme, useDisplay } from 'vuetify';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
 
 const theme = useTheme();
+const { mdAndUp } = useDisplay();
 const drawer = ref(true);
+const storedRail = localStorage.getItem('drawer-rail');
+const rail = ref(storedRail === null ? true : storedRail === 'true');
+
+watch(rail, (val) => {
+  localStorage.setItem('drawer-rail', String(val));
+});
 const router = useRouter();
 const authStore = useAuthStore();
 
@@ -22,20 +29,24 @@ function logout() {
 <template>
   <v-app>
     <!-- TOP BAR -->
-    <v-app-bar border flat class="bg-surface px-2">
+    <v-app-bar border flat class="bg-surface px-2" rounded="0">
       <v-app-bar-nav-icon @click="drawer = !drawer" class="d-md-none"></v-app-bar-nav-icon>
+      <v-btn icon @click="rail = !rail" class="d-none d-md-flex">
+        <v-icon>mdi-menu</v-icon>
+      </v-btn>
 
       <div class="d-flex align-center ps-2">
         <v-icon color="primary" class="me-3" size="large">mdi-cube-scan</v-icon>
         <span class="text-h6 font-weight-black tracking-tight text-high-emphasis">ASTRAKE EMS</span>
-        <v-chip size="x-small" color="primary" variant="tonal" class="ms-3 font-weight-bold" border>v0.0.2</v-chip>
+        <v-chip size="x-small" color="primary" variant="tonal" class="ms-3 font-weight-bold" border>v0.1.2</v-chip>
       </div>
 
       <v-spacer></v-spacer>
 
-      <v-btn icon @click="toggleTheme" color="medium-emphasis">
-        <v-icon>{{ theme.global.current.value.dark ? 'mdi-weather-sunny' : 'mdi-weather-night' }}</v-icon>
-      </v-btn>
+      <v-btn icon="mdi-weather-sunny" @click="toggleTheme" color="medium-emphasis"
+        v-if="theme.global.current.value.dark"></v-btn>
+      <v-btn icon="mdi-weather-night" @click="toggleTheme" color="medium-emphasis" v-else></v-btn>
+
       <v-menu min-width="200" offset="10">
         <template v-slot:activator="{ props }">
           <v-btn icon v-bind="props" class="ms-2">
@@ -68,43 +79,64 @@ function logout() {
     </v-app-bar>
 
     <!-- NAVIGATION -->
-    <v-navigation-drawer v-model="drawer" width="260" border>
-      <div class="pa-4">
-        <div class="text-overline font-weight-black text-disabled mb-2">Navigation</div>
+    <v-navigation-drawer v-model="drawer" :rail="mdAndUp && rail" :permanent="mdAndUp" width="260" border rounded="0">
+      <div :class="rail ? 'pa-2' : 'pa-4'">
+        <div class="text-overline font-weight-black text-disabled mb-2" v-if="!rail">Navigation</div>
 
-        <v-list density="compact" nav class="pa-0 bg-transparent">
-          <v-list-item to="/" rounded="lg" color="primary" variant="tonal" class="mb-1">
-            <template v-slot:prepend><v-icon>mdi-view-dashboard-outline</v-icon></template>
-            <v-list-item-title class="font-weight-bold">Action Center</v-list-item-title>
-          </v-list-item>
+        <v-list density="compact" nav class="pa-0">
+          <v-tooltip text="Action Center" location="end" :disabled="!rail" content-class="bg-grey-darken-4 text-white">
+            <template v-slot:activator="{ props }">
+              <v-list-item v-bind="props" to="/" exact color="primary" class="mb-1">
+                <template v-slot:prepend><v-icon>mdi-view-dashboard-outline</v-icon></template>
+                <v-list-item-title class="font-weight-bold">Action Center</v-list-item-title>
+              </v-list-item>
+            </template>
+          </v-tooltip>
 
-          <v-list-item to="/projects" rounded="lg" color="primary" variant="tonal" class="mb-1">
-            <template v-slot:prepend><v-icon>mdi-domain</v-icon></template>
-            <v-list-item-title class="font-weight-bold">Projects</v-list-item-title>
-          </v-list-item>
+          <v-tooltip text="Projects" location="end" :disabled="!rail" content-class="bg-grey-darken-4 text-white">
+            <template v-slot:activator="{ props }">
+              <v-list-item v-bind="props" to="/projects" color="primary" class="mb-1">
+                <template v-slot:prepend><v-icon>mdi-domain</v-icon></template>
+                <v-list-item-title class="font-weight-bold">Projects</v-list-item-title>
+              </v-list-item>
+            </template>
+          </v-tooltip>
 
-          <v-list-item to="/billing" rounded="lg" color="primary" variant="tonal" class="mb-1">
-            <template v-slot:prepend><v-icon>mdi-invoice-list-outline</v-icon></template>
-            <v-list-item-title class="font-weight-bold">Billing Cycles</v-list-item-title>
-          </v-list-item>
+          <v-tooltip text="Billing Cycles" location="end" :disabled="!rail" content-class="bg-grey-darken-4 text-white">
+            <template v-slot:activator="{ props }">
+              <v-list-item v-bind="props" to="/billing" color="primary" class="mb-1">
+                <template v-slot:prepend><v-icon>mdi-invoice-list-outline</v-icon></template>
+                <v-list-item-title class="font-weight-bold">Billing Cycles</v-list-item-title>
+              </v-list-item>
+            </template>
+          </v-tooltip>
         </v-list>
 
-        <div class="text-overline font-weight-black text-disabled mt-6 mb-2">Resources</div>
-        <v-list density="compact" nav class="pa-0 bg-transparent">
-          <v-list-item to="/employees" rounded="lg" color="primary" variant="tonal" class="mb-1">
-            <template v-slot:prepend><v-icon>mdi-account-group-outline</v-icon></template>
-            <v-list-item-title class="font-weight-bold">Workforce</v-list-item-title>
-          </v-list-item>
-          <v-list-item to="/settings" rounded="lg" color="primary" variant="tonal">
-            <template v-slot:prepend><v-icon>mdi-cog-outline</v-icon></template>
-            <v-list-item-title class="font-weight-bold">Settings</v-list-item-title>
-          </v-list-item>
+        <div class="text-overline font-weight-black text-disabled mt-6 mb-2" v-if="!rail">Resources</div>
+        <v-list density="compact" nav class="pa-0">
+          <v-tooltip text="Workforce" location="end" :disabled="!rail" content-class="bg-grey-darken-4 text-white">
+            <template v-slot:activator="{ props }">
+              <v-list-item v-bind="props" to="/employees" color="primary" class="mb-1">
+                <template v-slot:prepend><v-icon>mdi-account-group-outline</v-icon></template>
+                <v-list-item-title class="font-weight-bold">Workforce</v-list-item-title>
+              </v-list-item>
+            </template>
+          </v-tooltip>
+
+          <v-tooltip text="Settings" location="end" :disabled="!rail" content-class="bg-grey-darken-4 text-white">
+            <template v-slot:activator="{ props }">
+              <v-list-item v-bind="props" to="/settings" color="primary">
+                <template v-slot:prepend><v-icon>mdi-cog-outline</v-icon></template>
+                <v-list-item-title class="font-weight-bold">Settings</v-list-item-title>
+              </v-list-item>
+            </template>
+          </v-tooltip>
         </v-list>
       </div>
     </v-navigation-drawer>
 
     <!-- MAIN CONTENT -->
-    <v-main class="bg-background">
+    <v-main class="bg-background d-flex flex-column">
       <router-view v-slot="{ Component }">
         <v-fade-transition mode="out-in">
           <component :is="Component" />
@@ -113,7 +145,7 @@ function logout() {
     </v-main>
 
     <!-- FOOTER -->
-    <v-footer app border color="surface" height="44" class="px-4">
+    <v-footer app border color="surface" height="44" class="px-4" rounded="0">
       <span class="text-caption text-disabled font-weight-medium">&copy; 2025 Astrake Systems</span>
       <v-spacer></v-spacer>
       <div class="d-flex align-center">

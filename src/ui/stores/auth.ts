@@ -47,7 +47,6 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   function clearAuth() {
-    console.log('[Auth] Clearing authentication state');
     token.value = null;
     user.value = null;
     localStorage.removeItem('token');

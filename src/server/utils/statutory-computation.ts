@@ -6,7 +6,7 @@
  * All calculations are deterministic and explainable.
  */
 
-import type { StatutoryConfig } from '../../ui/types';
+import type { StatutoryConfig } from '../../shared/types';
 
 // Re-export for convenience
 export type { StatutoryConfig };

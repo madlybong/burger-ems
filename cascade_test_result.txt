@@ -1,0 +1,11 @@
+Attendance records for Worker1 (employee_id=1) in billing period 3:
+Count: 0
+Γ£à PASSED: No orphan attendance records found
+
+Billing employee record for Worker1 in period 3:
+Count: 0
+Γ£à PASSED: Billing employee record deleted
+
+Worker1 in employees table:
+Count: 1
+Γ£à PASSED: Employee still exists in system (not deleted globally)

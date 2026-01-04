@@ -47,6 +47,13 @@ import projects from "./api/projects";
 import billing from "./api/billing";
 import generate from "./api/generate";
 import upload from "./api/upload";
+import auth from "./api/auth";
+import portal from "./api/portal";
+import statutory from "./api/statutory";
+import statutoryComputation from "./api/statutory-computation";
+import statutoryOverrides from "./api/statutory-overrides";
+import attendance from "./api/attendance";
+import overtimeConfig from "./api/overtime-config";
 import db from "./db";
 
 // Ensure DB tables exist (init) 
@@ -62,6 +69,13 @@ app.route("/api/projects", projects);
 app.route("/api/billing", billing);
 app.route("/api/generate", generate);
 app.route("/api/upload", upload);
+app.route("/api/auth", auth);
+app.route("/api/portal", portal);
+app.route("/api/statutory", statutory);
+app.route("/api/statutory-computation", statutoryComputation);
+app.route("/api/statutory-overrides", statutoryOverrides);
+app.route("/api/attendance", attendance);
+app.route("/api/overtime-config", overtimeConfig);
 
 // Serve Embedded Frontend
 app.use("*", async (c, next) => {
@@ -81,10 +95,10 @@ app.use("*", async (c, next) => {
     await next();
 });
 
-console.log("Astrake EMS running on port 3000");
+console.log("Astrake EMS running on port 8765");
 
 export default {
-    port: 3000,
+    port: 8765,
     fetch: app.fetch
 };
     `;

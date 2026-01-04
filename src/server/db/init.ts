@@ -171,6 +171,50 @@ export function initDB() {
     );
   `);
 
+  // Phase 2.3: Calendar-based Attendance System
+  db.run(`
+    CREATE TABLE IF NOT EXISTS attendance_records (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      billing_period_id INTEGER NOT NULL,
+      employee_id INTEGER NOT NULL,
+      attendance_date TEXT NOT NULL,
+      status TEXT NOT NULL CHECK(status IN ('full', 'half', 'absent')) DEFAULT 'absent',
+      overtime_hours REAL NOT NULL DEFAULT 0,
+      notes TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(billing_period_id, employee_id, attendance_date),
+      FOREIGN KEY(billing_period_id) REFERENCES billing_periods(id) ON DELETE CASCADE,
+      FOREIGN KEY(employee_id) REFERENCES employees(id) ON DELETE CASCADE
+    );
+  `);
+
+  db.run(`
+    CREATE INDEX IF NOT EXISTS idx_attendance_period_employee 
+    ON attendance_records(billing_period_id, employee_id);
+  `);
+
+  db.run(`
+    CREATE INDEX IF NOT EXISTS idx_attendance_date 
+    ON attendance_records(attendance_date);
+  `);
+
+  // Phase 2.3: Project-level Overtime Configuration
+  db.run(`
+    CREATE TABLE IF NOT EXISTS project_overtime_config (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      project_id INTEGER NOT NULL UNIQUE,
+      ot_enabled BOOLEAN DEFAULT 0,
+      ot_rate REAL NOT NULL DEFAULT 1.5,
+      max_ot_hours_per_day REAL NOT NULL DEFAULT 4.0,
+      max_ot_hours_per_period REAL NOT NULL DEFAULT 60.0,
+      rounding_rule TEXT NOT NULL DEFAULT 'round' CHECK(rounding_rule IN ('round', 'floor', 'ceil')),
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE
+    );
+  `);
+
   console.log("Database initialized successfully.");
 
   // MIGRATIONS

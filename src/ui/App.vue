@@ -10,8 +10,7 @@ const isReady = ref(false)
 onMounted(() => {
   // Check authentication before rendering
   const currentPath = window.location.pathname
-  console.log('[Auth] Bootstrap check:', { authenticated: authStore.isAuthenticated, path: currentPath });
-  
+
   if (!authStore.isAuthenticated && currentPath !== '/login') {
     // Not authenticated and not on login page - redirect
     console.warn('[Auth] Redirecting to login checks failed');

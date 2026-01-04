@@ -37,6 +37,18 @@ billing.post("/", async (c) => {
     if (!from_date || typeof from_date !== 'string') return c.json({ error: "Invalid or missing from_date" }, 400);
     if (!to_date || typeof to_date !== 'string') return c.json({ error: "Invalid or missing to_date" }, 400);
 
+    // Validate date range
+    const fromDate = new Date(from_date);
+    const toDate = new Date(to_date);
+
+    if (isNaN(fromDate.getTime()) || isNaN(toDate.getTime())) {
+        return c.json({ error: "Invalid date format. Please use YYYY-MM-DD format." }, 400);
+    }
+
+    if (toDate < fromDate) {
+        return c.json({ error: "End date must be after start date." }, 400);
+    }
+
     // Check for Overlap
     // Condition: (ReqStart <= ExistingEnd) AND (ReqEnd >= ExistingStart)
     const existing = db.query(`
@@ -74,7 +86,7 @@ billing.get("/:id", (c) => {
     // Get assigned employees + their attendance/wages
     const employees = db.query(`
     SELECT e.id, e.name, e.skill_type, e.daily_wage, e.uan, e.gp_number,
-           be.days_worked, be.wage_amount
+           be.employee_id, be.days_worked, be.wage_amount
     FROM billing_employees be
     JOIN employees e ON be.employee_id = e.id
     WHERE be.billing_period_id = ?
@@ -93,6 +105,18 @@ billing.put("/:id", async (c) => {
     if (!from_date || typeof from_date !== 'string') return c.json({ error: "Invalid or missing from_date" }, 400);
     if (!to_date || typeof to_date !== 'string') return c.json({ error: "Invalid or missing to_date" }, 400);
 
+    // Validate date range
+    const fromDate = new Date(from_date);
+    const toDate = new Date(to_date);
+
+    if (isNaN(fromDate.getTime()) || isNaN(toDate.getTime())) {
+        return c.json({ error: "Invalid date format. Please use YYYY-MM-DD format." }, 400);
+    }
+
+    if (toDate < fromDate) {
+        return c.json({ error: "End date must be after start date." }, 400);
+    }
+
     const stmt = db.prepare("UPDATE billing_periods SET from_date = ?, to_date = ?, label = ? WHERE id = ?");
     stmt.run(from_date, to_date, label, id);
     return c.json({ id, ...body });
@@ -102,24 +126,86 @@ billing.put("/:id", async (c) => {
 billing.post("/:id/employees", async (c) => {
     const id = c.req.param("id"); // billing_period_id
     const body = await c.req.json();
-    const { employee_id, days_worked, wage_amount } = body; // single or array? Stick to single for simplicity or loop
+    const { employee_id, days_worked, wage_amount } = body;
 
     // Validation
     if (!employee_id || typeof employee_id !== 'number') return c.json({ error: "Invalid or missing employee_id" }, 400);
     if (typeof days_worked !== 'number') return c.json({ error: "Invalid or missing days_worked" }, 400);
     if (typeof wage_amount !== 'number') return c.json({ error: "Invalid or missing wage_amount" }, 400);
 
-    // Upsert
-    const stmt = db.prepare(`
-    INSERT INTO billing_employees (billing_period_id, employee_id, days_worked, wage_amount)
-    VALUES (?, ?, ?, ?)
-    ON CONFLICT(billing_period_id, employee_id) DO UPDATE SET
-      days_worked = excluded.days_worked,
-      wage_amount = excluded.wage_amount
-  `);
+    try {
+        const period = db.query("SELECT from_date, to_date FROM billing_periods WHERE id = ?").get(id) as any;
+        if (!period) return c.json({ error: "Billing period not found" }, 404);
+
+        const doInsert = db.transaction(() => {
+            // 1. Upsert Summary
+            db.prepare(`
+                INSERT INTO billing_employees (billing_period_id, employee_id, days_worked, wage_amount)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(billing_period_id, employee_id) DO UPDATE SET
+                  days_worked = excluded.days_worked,
+                  wage_amount = excluded.wage_amount
+            `).run(id, employee_id, days_worked, wage_amount);
+
+            // 2. Seed Attendance (Only if no records exist)
+            const countRes = db.prepare("SELECT COUNT(*) as c FROM attendance_records WHERE billing_period_id = ? AND employee_id = ?").get(id, employee_id) as any;
+
+            if (countRes.c === 0 && days_worked > 0) {
+                const startDate = new Date(period.from_date);
+                const endDate = new Date(period.to_date);
+
+                if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+                    throw new Error("Invalid billing period dates");
+                }
+
+                const targetDays = Math.floor(days_worked);
+                let seededCount = 0;
+
+                const insertRecord = db.prepare(`
+                    INSERT INTO attendance_records (billing_period_id, employee_id, attendance_date, status, overtime_hours)
+                    VALUES (?, ?, ?, 'full', 0)
+                `);
+
+                const current = new Date(startDate);
+                while (current <= endDate && seededCount < targetDays) {
+                    const day = current.getUTCDay(); // 0=Sun, 6=Sat
+                    const dateStr = current.toISOString().split('T')[0];
+
+                    // Skip Weekends (Sat & Sun)
+                    if (day !== 0 && day !== 6) {
+                        insertRecord.run(Number(id), Number(employee_id), dateStr);
+                        seededCount++;
+                    }
+                    current.setUTCDate(current.getUTCDate() + 1);
+                }
+            }
+        });
+
+        doInsert();
+        return c.json({ success: true });
+    } catch (e: any) {
+        return c.json({ error: e.message }, 400);
+    }
+});
+
+// Delete Employee from Billing Period
+billing.delete("/:id/employees/:employee_id", (c) => {
+    const billingPeriodId = c.req.param("id");
+    const employeeId = c.req.param("employee_id");
 
     try {
-        stmt.run(id, employee_id, days_worked, wage_amount);
+        db.transaction(() => {
+            db.prepare(`
+                DELETE FROM attendance_records 
+                WHERE billing_period_id = ? AND employee_id = ?
+            `).run(billingPeriodId, employeeId);
+
+            db.prepare(`
+                DELETE FROM billing_employees 
+                WHERE billing_period_id = ? AND employee_id = ?
+            `).run(billingPeriodId, employeeId);
+        })();
+
         return c.json({ success: true });
     } catch (e: any) {
         return c.json({ error: e.message }, 400);
@@ -342,6 +428,40 @@ billing.post("/:id/finalize", async (c) => {
     } catch (err: any) {
         console.error("Finalization error:", err);
         return c.json({ error: err.message }, 500);
+    }
+});
+
+// Delete Billing Period (Cascade)
+billing.delete("/:id", (c) => {
+    const id = c.req.param("id");
+
+    try {
+        const doDelete = db.transaction(() => {
+            // 1. Delete generated documents
+            db.prepare("DELETE FROM generated_documents WHERE billing_period_id = ?").run(id);
+
+            // 2. Delete computations (Cascades to employee_statutory -> overrides)
+            db.prepare("DELETE FROM billing_period_statutory_computation WHERE billing_period_id = ?").run(id);
+
+            // 3. Delete attendance records (Cascades from billing_periods usually, but explicit safety)
+            db.prepare("DELETE FROM attendance_records WHERE billing_period_id = ?").run(id);
+
+            // 4. Delete billing employees
+            db.prepare("DELETE FROM billing_employees WHERE billing_period_id = ?").run(id);
+
+            // 5. Delete the period
+            return db.prepare("DELETE FROM billing_periods WHERE id = ?").run(id);
+        });
+
+        const info = doDelete();
+
+        if (info.changes === 0) {
+            return c.json({ error: "Billing period not found" }, 404);
+        }
+
+        return c.json({ success: true });
+    } catch (e: any) {
+        return c.json({ error: e.message }, 500);
     }
 });
 

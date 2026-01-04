@@ -1,0 +1,18 @@
+Testing Billing Period Date Validation...
+
+Test 1: Invalid date range (end before start)
+Γ£à PASSED: Backend correctly rejected invalid date range
+   Error message: "End date must be after start date."
+
+Test 2: Valid date range (should succeed)
+Γ¥î FAILED: Backend rejected valid date range
+   Status: 400
+   Response: {
+  error: "Billing period overlaps with an existing period for this project.",
+} 
+
+Test 3: Invalid date format
+Γ£à PASSED: Backend correctly rejected invalid date format
+   Error message: "Invalid date format. Please use YYYY-MM-DD format."
+
+Date validation tests complete!

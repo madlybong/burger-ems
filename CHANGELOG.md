@@ -2,7 +2,63 @@
 
 All notable changes to this project will be documented in this file.
 
-## [0.1.2] - 2025-12-29
+## [0.1.5] - 2026-01-04
+
+### Added - Robustness & Performance
+- **Data Integrity**: Implemented "Week Off" toggle cycle and rigorous backend validation for date ranges.
+- **Performance**: Added virtual scrolling for employee lists (handles 100+ items smoothly) and debounced search inputs.
+- **Error Handling**: Comprehensive global error boundary, network retry logic with exponential backoff, and user-friendly error alerts.
+- **Documentation**: New Developer Guide and User Guide for the Attendance Workspace.
+
+### Fixed
+- **Critical**: Prevented creation of billing periods where `End Date` < `Start Date`.
+- **UI**: Fixed sticky header layout issues and mobile responsiveness.
+- **Type Safety**: Resolved all TypeScript errors in the UI codebase.
+
+## [0.1.4] - 2026-01-04
+
+### Fixed - Attendance & UI Polish
+- **Attendance Data Integrity**: Fixed issue where orphan attendance records persisted after deleting an employee from a billing period.
+- **Attendance Counts**: Resolved discrepancy between attendance summary count and actual calendar days.
+- **Week Off Toggle**: Fixed bug preventing "Week Off" status from being applied correctly.
+- **Header Layout**: Restored visibility of Attendance Header and improved spacing/layout.
+- **Search Experience**: Unified search bar in the header, removed duplicate input in sidebar, and fixed filtering logic.
+- **Autocomplete**: Disabled browser autocomplete on search and overtime inputs for cleaner UI.
+- **UI Bleed**: Fixed calendar grid bleeding into left navigation.
+- **Scrollbars**: Fixed double scrollbars by enforcing strict viewport height on workspace.
+
+## [0.1.3] - 2026-01-03
+
+### Added - Attendance Engine Refactor (Phase 2.3)
+
+#### Attendance Workspace
+- **Calendar-Based Workflow**: New full-screen workspace for day-by-day attendance tracking.
+- **Dedicated Route**: `/billing/:id/attendance` with efficient calendar grid interface.
+- **Smart Status Toggles**: One-click cycle through Full, Half, and Absent statuses.
+- **Real-Time Calculation**: Employee days and wages update instantly upon changes.
+- **Mobile Optimization**: Responsive accordion view with touch-friendly controls.
+- **Quick Actions**: "Mark All Full" and "Clear" buttons for bulk updates on mobile.
+- **Visual Locking**: Clear indicators when periods are finalized (read-only mode).
+
+#### Overtime Management
+- **Project-Level Configuration**: Define OT rules (rate, caps, rounding) per project.
+- **Daily & Period Limits**: Strict validation prevents OT exceeding daily or period caps.
+- **Integrated Entry**: Record overtime hours directly within the attendance calendar.
+- **Validation Feedback**: Clear, actionable error messages for invalid OT entries.
+
+#### Database & API
+- **New Tables**: `attendance_records` (daily tracking) and `project_overtime_config`.
+- **Backward Compatibility**: Seamlessly coexists with legacy `days_worked` summary data.
+- **Audit Trail**: Tracking of creation and update timestamps for all records.
+- **API Security**: Strict lock enforcement prevents editing finalized data.
+
+#### UI Enhancements
+- **"Add Attendance" Modal**: Smart filtering to exclude already-added employees.
+- **Rich Employee List**: Avatars, skill types, and wage details in selectors.
+- **Terminology Update**: Shifted from "Manpower" to professional "Attendance" terminology.
+- **Sticky Layouts**: Employee names and totals remain visible while scrolling.
+
+---
 
 ### Added - PF/ESI Statutory Compliance System (Phase 2.2)
 
