@@ -84,13 +84,13 @@ app.use("*", async (c, next) => {
         const content = assets.get(path)!;
         const mime = getMimeType(path) || "application/octet-stream";
         c.header("Content-Type", mime);
-        return c.body(content);
+        return c.body(content as any);
     }
     // SPA Fallback
     if (!path.startsWith("/api") && assets.has("/index.html")) {
          const content = assets.get("/index.html")!;
          c.header("Content-Type", "text/html");
-         return c.body(content);
+         return c.body(content as any);
     }
     await next();
 });
